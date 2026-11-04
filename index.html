@@ -738,6 +738,14 @@ function renderPanel(force) {
     if (!preview && sb) {
       const f = h('form', 'noteform');
       f.innerHTML = `<label class="sr" for="nt">Neue Notiz zu ${esc(n.name)}</label><input type="text" id="nn" maxlength="40" placeholder="Dein Name" aria-label="Dein Name" value="${esc(store.get('name', ''))}"${store.get('name', '') ? ' hidden' : ''}><textarea id="nt" rows="2" maxlength="1200" placeholder="Notiz zu ${esc(n.name)} …"></textarea><button class="iconbtn" type="submit">Notiz speichern</button>`;
+      const nmNow = store.get('name', '');
+      if (nmNow) {
+        const line = h('div', 'who'); line.innerHTML = `<span>Du schreibst als <b>${esc(nmNow)}</b></span>`;
+        const ch = h('button', null, 'Name ändern'); ch.type = 'button';
+        ch.onclick = () => { line.hidden = true; const inp = f.querySelector('#nn'); inp.hidden = false; inp.focus(); inp.select(); };
+        line.appendChild(ch); f.insertBefore(line, f.firstChild);
+      }
+      f.querySelector('#nn').addEventListener('change', e => { const v = e.target.value.trim(); if (v) { store.set('name', v); say('Name gespeichert. Neue Notizen tragen jetzt „' + v + '“.', 3500); } });
       f.onsubmit = e => { e.preventDefault(); const v = f.querySelector('textarea').value.trim(); if (!v) return; const nm = f.querySelector('#nn').value.trim(); if (!nm) { f.querySelector('#nn').hidden = false; f.querySelector('#nn').focus(); return say('Bitte zuerst deinen Namen eintragen.', 3000); } store.set('name', nm); addNote(id, v).then(ok => { if (ok) { f.querySelector('textarea').value = ''; renderPanel(true); } }); };
       sec.appendChild(f);
     } else if (!preview && !notes.length) sec.appendChild(h('p', 'empty', 'Noch keine Notizen.'));
