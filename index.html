@@ -203,7 +203,35 @@ ul.plain li::marker { color: var(--faint); }
 .dmlink { margin-top: 14px; border: 0; background: none; color: var(--faint); font-size: 12px; padding: 0; text-decoration: underline; }
 .dmbtn { border-color: var(--ember); color: var(--ember); }
 .dmbtn[aria-pressed="true"] { background: var(--ember); color: var(--ink); }
-.dmbtn[hidden], .netstate[hidden] { display: none; }
+.dmbtn[hidden], .netstate[hidden], .calbtn[hidden] { display: none; }
+.calbtn { white-space: nowrap; }
+@media (max-width: 860px) { #ovl.overlay { position: fixed; inset: 0; z-index: 20; padding: 12px 10px; } .cal-day { height: 42px; } }
+.sheet.cal { width: min(560px, 100%); }
+.cal-heute { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 8px; }
+.cal-title { text-align: center; display: grid; }
+.cal-title b { font-family: var(--f-display); font-weight: 400; font-size: 20px; }
+.cal-title small { color: var(--faint); font-size: 12px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-wd { font-family: var(--f-mono); font-size: 10px; text-align: center; letter-spacing: .04em; padding: 2px 0; overflow: hidden; text-overflow: ellipsis; }
+.cal-day { position: relative; height: 46px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--panel-2); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; font: inherit; cursor: pointer; }
+.cal-day .n { font-size: 14px; }
+.cal-day .m { font-size: 12px; line-height: 1; min-height: 12px; }
+.cal-day.vorbei { opacity: .62; }
+.cal-day.heute { border-color: var(--ember); box-shadow: 0 0 0 1px var(--ember) inset; opacity: 1; }
+.cal-day.sel { background: rgba(242,166,90,.16); }
+.cal-day i, .cal-leg i { position: absolute; width: 6px; height: 6px; border-radius: 50%; }
+.cal-day i.f { top: 4px; right: 4px; background: #9fe3ff; }
+.cal-day i.c { bottom: 4px; right: 4px; background: var(--ember); }
+.cal-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--faint); }
+.cal-leg span { display: inline-flex; align-items: center; gap: 4px; }
+.cal-leg i { position: static; display: inline-block; }
+.cal-leg i.f { background: #9fe3ff; } .cal-leg i.c { background: var(--ember); }
+.cal-det { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; display: grid; gap: 6px; }
+.cal-det h4 { margin: 0; font-size: 15px; font-weight: 500; }
+.cal-det p { margin: 0; }
+.cal-fest { color: #9fe3ff; font-size: 14px; }
+.cal-det textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px; }
 .netstate { position: absolute; left: 12px; bottom: 64px; z-index: 4; max-width: min(420px, calc(100% - 24px)); font-size: 12.5px; color: var(--muted); background: rgba(12,17,28,.86); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .wtext p { margin: 0 0 10px; font-size: 15px; }
 .wtext p:last-child { margin-bottom: 0; }
@@ -260,6 +288,7 @@ ul.plain li::marker { color: var(--faint); }
       <input id="q" type="search" placeholder="Ort, Person, Auftrag …" autocomplete="off" aria-label="Suchen">
       <div class="results" id="results" hidden role="listbox"></div>
     </div>
+    <button class="iconbtn calbtn" id="btnCal" aria-pressed="false" hidden></button>
     <button class="iconbtn" id="btnQuests" aria-pressed="false">Aufträge</button>
     <button class="iconbtn" id="btnNpcs" aria-pressed="false">Personen</button>
     <button class="iconbtn" id="btnLayers" aria-pressed="false" aria-controls="pop">Legende</button>
@@ -426,7 +455,7 @@ const SCHEMA_BG = {
     [[430, 270, 40, 26], [520, 380, 46, 30], [420, 470, 40, 28], [650, 440, 36, 26], [740, 520, 42, 30], [250, 320, 38, 24], [560, 490, 30, 22]].forEach(([x, y, w, hh]) => el('rect', { x, y, width: w, height: hh, fill: '#3e3022', stroke: '#2a1f16' }, g));
     el('path', { d: SCHEMA_SHAPES.wegbrunnen, fill: '#3a2d21' }, g);
     el('path', { d: 'M500 690L500 750', stroke: '#8a6a4d', 'stroke-width': 8, 'stroke-dasharray': '3 6' }, g);
-    el('text', { x: 500, y: 738, 'text-anchor': 'middle', class: 'lbl small', 'font-size': 14 }, g).textContent = 'Landweg nach Umlilo · 4 Tage ↓';
+    el('text', { x: 500, y: 738, 'text-anchor': 'middle', class: 'lbl small', 'font-size': 14 }, g).textContent = 'Landweg nach Umlilo · ca. 1½ Tage ↓';
     el('text', { x: 18, y: 418, class: 'lbl small', 'font-size': 14 }, g).textContent = '← Toter Brunnen';
     el('text', { x: 500, y: 36, 'text-anchor': 'middle', class: 'lbl small', 'font-size': 14 }, g).textContent = 'Meer · Ankunft von Norden';
     el('text', { x: 985, y: 196, 'text-anchor': 'end', class: 'lbl small', 'font-size': 12, opacity: .7 }, g).textContent = 'Schema';
@@ -810,7 +839,7 @@ function dmBox(id) {
 
 /* ── Übersichten: Aufträge & Personen ── */
 let ovlKind = null;
-function closeOverlay() { const o = $('ovl'); if (o) o.remove(); ovlKind = null; $('btnQuests').setAttribute('aria-pressed', 'false'); $('btnNpcs').setAttribute('aria-pressed', 'false'); }
+function closeOverlay() { const o = $('ovl'); if (o) o.remove(); ovlKind = null; if ($('btnCal')) $('btnCal').setAttribute('aria-pressed', 'false'); $('btnQuests').setAttribute('aria-pressed', 'false'); $('btnNpcs').setAttribute('aria-pressed', 'false'); }
 function openOverlay(kind) {
   if (ovlKind === kind) return closeOverlay();
   closeOverlay(); ovlKind = kind;
@@ -971,6 +1000,148 @@ window.addEventListener('hashchange', () => { const id = fromHash(); if (id && i
 const hideHint = () => { $('hint').hidden = true; store.set('hint', false); };
 $('hintX').onclick = hideHint;
 if (store.get('hint', true) === false) $('hint').hidden = true;
+/* ── Kalender Aphindras (Vorlage: Kalenderjahr 2023) ── */
+const CAL = {
+  monate: [
+    ['Frühzol', 31, "Zol'Emun", 'Ukuzola', 'Winter, Stille, Geduld'],
+    ['Spätzol', 28, "Zol'Emun", 'Ukuzola', 'Winter'],
+    ['Frühmanz', 31, 'Manzora', 'Amanzi', 'Schneeschmelze, Regen, Heilung'],
+    ['Spätmanz', 30, 'Manzora', 'Amanzi', 'Frühling'],
+    ['Frühvel', 31, 'Velanai', 'Imvelo', 'Wachstum, Blüte'],
+    ['Spätvel', 30, 'Velanai', 'Imvelo', 'Frühsommer'],
+    ['Frühkron', 31, 'Mandreth', 'Amandla', 'Hochsommer, Hitze'],
+    ['Spätkron', 31, 'Mandreth', 'Amandla', 'Hochsommer'],
+    ['Frühdal', 30, 'Dalmarin', 'Dala', 'Ernte, Handwerk, Vorräte'],
+    ['Spätdal', 31, 'Dalmarin', 'Dala', 'Herbst'],
+    ['Frühthand', 30, 'Thandorel', 'Sthandwa', 'Lange Abende, Lernen, Forschen'],
+    ['Spätthand', 31, 'Thandorel', 'Sthandwa', 'Winter']
+  ],
+  // Index = Wochentag wie in JS (0 = Sonntag); Woche beginnt mit Zoltag
+  tage: ['Sammeltag', 'Zoltag', 'Thandtag', 'Veltag', 'Daltag', 'Manztag', 'Kronentag'],
+  kurz: ['Zol', 'Thand', 'Vel', 'Dal', 'Manz', 'Kron', 'Sammel'],
+  farbe: ['var(--muted)', '#e8c547', '#a77bd8', '#5fb874', '#e8914a', '#5a9be0', '#d9534f'],
+  // Mondphasen 1247 d. Z. laut Vault (Vorlage 2023)
+  neu1247: [21, 20, 21, 20, 19, 18, 17, 16, 15, 14, 13, 13],
+  voll1247: [[6], [5], [7], [6], [5], [4], [3], [1, 31], [29], [28], [27], [27]],
+  feste: [ // [Monat (0-basiert), Tag, Name, Ethnie]
+    [0, 1, 'Fest der Zusammenkunft (Neujahr)', 'alle, Kursant'],
+    [2, 20, 'Tag der Waage', 'Amanzi, am Wasser'],
+    [5, 21, 'Wurzelfest', 'Imvelo, Umthi'],
+    [6, 1, 'Schwurtag', 'Amandla, Kursant'],
+    [8, 23, 'Tag des Werks', 'Dala, Kwenziwe'],
+    [11, 22, 'Nacht der Fragen', 'Sthandwa, Umlilo']
+  ],
+  himmel1247: [[3, 20, 'Sonnenfinsternis'], [4, 5, 'schwache Mondfinsternis'], [7, 31, 'zweiter Vollmond im Monat'], [9, 14, 'ringförmige Sonnenfinsternis'], [9, 28, 'teilweise Mondfinsternis']]
+};
+const calStart = jahr => { const off = jahr - 1247; let d = 0; for (let y = 0; y < Math.abs(off); y++) d += 365; return off >= 0 ? d : -d; };
+const doyOf = (m, d) => CAL.monate.slice(0, m).reduce((a, x) => a + x[1], 0) + d;
+const fromDoy = doy => { let m = 0; while (doy > CAL.monate[m][1]) { doy -= CAL.monate[m][1]; m++; } return [m, doy]; };
+const wday = (jahr, doy) => (((calStart(jahr) + doy - 1) % 7) + 7) % 7; // 1. Frühzol 1247 = Sammeltag
+// Neumonde als fortlaufende Tageszahl ab 1. Frühzol 1247
+const NEUMONDE = (() => { const out = []; CAL.neu1247.forEach((d, m) => out.push(doyOf(m, d))); const SYN = 29.530588853; const last = out[out.length - 1], first = out[0]; for (let k = 1; k < 60; k++) { out.push(Math.round(last + k * SYN)); out.unshift(Math.round(first - k * SYN)); } return out.sort((a, b) => a - b); })();
+const VOLLMONDE = (() => { const out = []; CAL.voll1247.forEach((ds, m) => ds.forEach(d => out.push(doyOf(m, d)))); return out; })();
+function mondInfo(jahr, doy) {
+  const t = calStart(jahr) + doy;
+  let prev = NEUMONDE[0]; for (const n of NEUMONDE) { if (n <= t) prev = n; else break; }
+  const age = t - prev;
+  const neu = NEUMONDE.includes(t);
+  const voll = jahr === 1247 ? VOLLMONDE.includes(t) : Math.round(age) === 15;
+  const g = neu ? '🌑' : voll ? '🌕' : age < 4 ? '🌒' : age < 11 ? (age < 8 ? '🌓' : '🌔') : age < 15 ? '🌔' : age < 19 ? '🌖' : age < 23 ? '🌗' : '🌘';
+  const name = neu ? 'Neumond' : voll ? 'Vollmond' : age < 15 ? 'zunehmender Mond' : 'abnehmender Mond';
+  return { g, name, neu, voll };
+}
+function festeAm(jahr, m, d) {
+  const out = CAL.feste.filter(f => f[0] === m && f[1] === d).map(f => f[2] + ' (' + f[3] + ')');
+  // Nacht des Hörens: erster Vollmond ab 1. Spätzol
+  for (let doy = doyOf(1, 1); doy <= doyOf(2, 31); doy++) { if (mondInfo(jahr, doy).voll) { if (doy === doyOf(m, d)) out.push('Nacht des Hörens (Ukuzola, Aldif)'); break; } }
+  if (jahr === 1247) CAL.himmel1247.filter(x => x[0] === m && x[1] === d).forEach(x => out.push(x[2]));
+  return out;
+}
+const datumText = (jahr, doy, mitTag = true) => { const [m, d] = fromDoy(doy); return (mitTag ? CAL.tage[wday(jahr, doy)] + ', ' : '') + d + '. ' + CAL.monate[m][0] + ' ' + jahr + ' d. Z.'; };
+const heute = () => ({ jahr: (G && G.jahr) || 1247, tag: (G && G.tag) || 13 });
+const chronikKey = (jahr, doy) => jahr + '-' + doy;
+
+function renderCalBtn() {
+  const b = $('btnCal'); if (!b) return;
+  if (!G || !G.tag) { b.hidden = true; return; }
+  const { jahr, tag } = heute(); const [m, d] = fromDoy(tag);
+  b.hidden = false;
+  b.innerHTML = `<span aria-hidden="true">${mondInfo(jahr, tag).g}</span> ${d}. ${esc(CAL.monate[m][0])}`;
+  b.title = datumText(jahr, tag) + ' · ' + mondInfo(jahr, tag).name;
+}
+let calView = null, calSel = null;
+function openCal() {
+  if (ovlKind === 'cal') return closeOverlay();
+  closeOverlay(); ovlKind = 'cal'; $('btnCal').setAttribute('aria-pressed', 'true');
+  const { jahr, tag } = heute(); calView = { jahr, m: fromDoy(tag)[0] }; calSel = tag;
+  renderCal();
+}
+function renderCal(force) {
+  if (ovlKind !== 'cal') return;
+  if (!force && panelBusy() && $('ovl')) { panelPending = true; return; }
+  let o = $('ovl'); const keep = o ? o.scrollTop : 0;
+  if (!o) { o = h('div', 'overlay'); o.id = 'ovl'; o.onclick = e => { if (e.target === o) closeOverlay(); }; $('stage').appendChild(o); }
+  o.innerHTML = '';
+  const { jahr: hj, tag: ht } = heute();
+  const { jahr, m } = calView; const [mn, ml, erb, eth, jz] = CAL.monate[m];
+  const sh = h('div', 'sheet cal'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Kalender');
+  const hd = h('h2', null, `<span>Kalender</span>`); const x = h('button', 'iconbtn', 'Schließen'); x.onclick = closeOverlay; hd.appendChild(x); sh.appendChild(hd);
+  sh.appendChild(h('p', 'cal-heute', `Heute: <b>${esc(datumText(hj, ht))}</b> · ${mondInfo(hj, ht).g} ${esc(mondInfo(hj, ht).name)}`));
+  if (DMMODE) {
+    const row = h('div', 'btnrow');
+    const step = n => () => { let t = ht + n, j = hj; if (t < 1) { j--; t += 365; } if (t > 365) { j++; t -= 365; } setDatum(j, t); };
+    [['− 1 Tag', -1], ['+ 1 Tag', 1], ['+ 7 Tage', 7]].forEach(([l, n]) => { const b = h('button', 'iconbtn', l); b.onclick = step(n); row.appendChild(b); });
+    sh.appendChild(row);
+  }
+  const nav = h('div', 'cal-nav');
+  const prev = h('button', 'iconbtn', '‹'); prev.setAttribute('aria-label', 'Vorheriger Monat');
+  prev.onclick = () => { if (--calView.m < 0) { calView.m = 11; calView.jahr--; } renderCal(true); };
+  const next = h('button', 'iconbtn', '›'); next.setAttribute('aria-label', 'Nächster Monat');
+  next.onclick = () => { if (++calView.m > 11) { calView.m = 0; calView.jahr++; } renderCal(true); };
+  const ti = h('div', 'cal-title', `<b>${esc(mn)} ${jahr} d. Z.</b><small>${esc(erb)} · ${esc(eth)} · ${esc(jz)}</small>`);
+  nav.appendChild(prev); nav.appendChild(ti); nav.appendChild(next); sh.appendChild(nav);
+  const grid = h('div', 'cal-grid');
+  CAL.kurz.forEach((k, i) => { const c = h('div', 'cal-wd', esc(k)); c.style.color = CAL.farbe[(i + 1) % 7]; grid.appendChild(c); });
+  const first = doyOf(m, 1); const lead = (wday(jahr, first) + 6) % 7;
+  for (let i = 0; i < lead; i++) grid.appendChild(h('div', 'cal-pad'));
+  const chron = (G && G.chronik) || {};
+  for (let d = 1; d <= ml; d++) {
+    const doy = first + d - 1; const mi = mondInfo(jahr, doy); const fe = festeAm(jahr, m, d);
+    const c = h('button', 'cal-day'); c.type = 'button';
+    if (jahr === hj && doy === ht) c.classList.add('heute');
+    if (jahr < hj || (jahr === hj && doy < ht)) c.classList.add('vorbei');
+    if (calSel === doy) c.classList.add('sel');
+    c.innerHTML = `<span class="n">${d}</span><span class="m">${mi.neu || mi.voll ? mi.g : ''}</span>${fe.length ? '<i class="f" title="Fest oder Himmelsereignis"></i>' : ''}${chron[chronikKey(jahr, doy)] ? '<i class="c" title="Eintrag der Gruppe"></i>' : ''}`;
+    c.setAttribute('aria-label', datumText(jahr, doy));
+    c.onclick = () => { calSel = doy; renderCal(true); };
+    grid.appendChild(c);
+  }
+  sh.appendChild(grid);
+  sh.appendChild(h('div', 'cal-leg', '<span>🌑 Neumond</span><span>🌕 Vollmond</span><span><i class="f"></i> Fest / Himmel</span><span><i class="c"></i> Was geschah</span>'));
+  // Tagesdetail
+  if (calSel && fromDoy(calSel)[0] === m) {
+    const [, d] = fromDoy(calSel); const det = h('div', 'cal-det');
+    const mi = mondInfo(jahr, calSel);
+    det.innerHTML = `<h4>${esc(datumText(jahr, calSel))}</h4><p class="state">${mi.g} ${esc(mi.name)}</p>`;
+    festeAm(jahr, m, d).forEach(f => det.appendChild(h('p', 'cal-fest', '✦ ' + esc(f))));
+    const txt = chron[chronikKey(jahr, calSel)];
+    if (txt) det.appendChild(h('div', 'wtext', mdText(txt)));
+    else if (!DMMODE) det.appendChild(h('p', 'unknown', jahr < hj || (jahr === hj && calSel <= ht) ? 'Kein Eintrag.' : 'Noch nicht geschehen.'));
+    if (DMMODE) {
+      const ta = h('textarea'); ta.rows = 3; ta.value = txt || ''; ta.placeholder = 'Was an diesem Tag geschah (für die Gruppe sichtbar)'; ta.setAttribute('aria-label', 'Eintrag');
+      const row = h('div', 'btnrow');
+      const sv = h('button', 'iconbtn', 'Eintrag speichern');
+      sv.onclick = () => { const c = Object.assign({}, chron); const v = ta.value.trim(); if (v) c[chronikKey(jahr, calSel)] = v; else delete c[chronikKey(jahr, calSel)]; write(() => put('gruppe', { id: 'stand', chronik: c }), 'Gespeichert.').then(() => renderCal(true)); };
+      const hier = h('button', 'iconbtn', 'Heute ist dieser Tag'); hier.onclick = () => setDatum(jahr, calSel);
+      row.appendChild(sv); row.appendChild(hier);
+      det.appendChild(ta); det.appendChild(row);
+    }
+    sh.appendChild(det);
+  }
+  o.appendChild(sh); o.scrollTop = keep;
+}
+function setDatum(jahr, tag) { write(() => put('gruppe', { id: 'stand', jahr, tag }), 'Datum: ' + datumText(jahr, tag)).then(() => { calSel = tag; calView = { jahr, m: fromDoy(tag)[0] }; renderCal(true); }); }
+
 /* ── Aktualisieren nach neuen Daten ── */
 let netErr = false, refreshQ = false, wLoaded = false, pendingStart = null;
 function refresh() {
@@ -981,7 +1152,7 @@ function refresh() {
     if (!N[S.focus] || (S.map !== 'world' && !Object.values(N).some(n => n.map === S.map && (n.id === 'world' || ownMap(n.id))))) { S.focus = 'world'; S.sel = null; S.map = '__'; go('world', { instant: true }); return; }
     if (S.sel && !N[S.sel]) S.sel = null;
     if (S.hover && !N[S.hover]) S.hover = null;
-    draw(); renderPanel(); renderOverlay();
+    draw(); renderPanel(); renderOverlay(); renderCalBtn();
     if (pendingStart && wLoaded) { const s = pendingStart; pendingStart = null; if (N[s]) go(s, { instant: true }); }
   });
 }
@@ -1085,7 +1256,8 @@ function openLogin() {
   o.appendChild(sh); $('stage').appendChild(o);
 }
 const _renderOverlay = renderOverlay;
-renderOverlay = function (force) { if (ovlKind === 'login') return; return _renderOverlay(force); };
+renderOverlay = function (force) { if (ovlKind === 'login') return; if (ovlKind === 'cal') return renderCal(force); return _renderOverlay(force); };
+$('btnCal').onclick = openCal;
 $('btnDM').onclick = () => { DMMODE = !DMMODE; store.set('dm', DMMODE); $('btnDM').setAttribute('aria-pressed', String(DMMODE)); refresh(); };
 
 /* ── Start ── */
