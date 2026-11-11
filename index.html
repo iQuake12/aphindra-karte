@@ -240,6 +240,18 @@ ul.plain li::marker { color: var(--faint); }
 .vsec summary small { color: var(--faint); font-size: 11px; }
 .vsec .draft { margin: 6px 0; max-height: 260px; }
 .vsec button { margin-bottom: 4px; }
+.rufrow { padding: 8px 0; border-top: 1px solid var(--line-soft); display: grid; gap: 4px; }
+.rufhead { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.rufname { font-weight: 500; } .rufname small { color: var(--faint); font-weight: 400; }
+.rufstufe { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+.rufbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.rufbar span { height: 7px; border-radius: 3px; background: var(--panel-2); border: 1px solid var(--line-soft); }
+.rufbar span.mid { border-color: var(--line); }
+.rufinfo { font-size: 13px; color: var(--muted); }
+.rufgrund { font-size: 14px; } .rufgrund p { margin: 0; }
+.rufleg { margin-top: 12px; display: grid; gap: 2px; font-size: 12px; color: var(--faint); }
+.rufleg b { color: var(--muted); font-weight: 500; }
+.listedit select, .listedit label { font-size: 13px; }
 .cal-sub { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
 .cal-det textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px; }
 .netstate { position: absolute; left: 12px; bottom: 64px; z-index: 4; max-width: min(420px, calc(100% - 24px)); font-size: 12.5px; color: var(--muted); background: rgba(12,17,28,.86); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
@@ -301,6 +313,7 @@ ul.plain li::marker { color: var(--faint); }
     <button class="iconbtn calbtn" id="btnCal" aria-pressed="false" hidden></button>
     <button class="iconbtn" id="btnQuests" aria-pressed="false">Aufträge</button>
     <button class="iconbtn" id="btnNpcs" aria-pressed="false">Personen</button>
+    <button class="iconbtn" id="btnRuf" aria-pressed="false">Ruf</button>
     <button class="iconbtn" id="btnLayers" aria-pressed="false" aria-controls="pop">Legende</button>
     <button class="iconbtn dmbtn" id="btnDM" aria-pressed="false" hidden>Spielleitung</button>
   </header>
@@ -850,7 +863,7 @@ function dmBox(id) {
 
 /* ── Übersichten: Aufträge & Personen ── */
 let ovlKind = null;
-function closeOverlay() { const o = $('ovl'); if (o) o.remove(); ovlKind = null; if ($('btnCal')) $('btnCal').setAttribute('aria-pressed', 'false'); $('btnQuests').setAttribute('aria-pressed', 'false'); $('btnNpcs').setAttribute('aria-pressed', 'false'); }
+function closeOverlay() { const o = $('ovl'); if (o) o.remove(); ovlKind = null; if ($('btnCal')) $('btnCal').setAttribute('aria-pressed', 'false'); if ($('btnRuf')) $('btnRuf').setAttribute('aria-pressed', 'false'); $('btnQuests').setAttribute('aria-pressed', 'false'); $('btnNpcs').setAttribute('aria-pressed', 'false'); }
 function openOverlay(kind) {
   if (ovlKind === kind) return closeOverlay();
   closeOverlay(); ovlKind = kind;
@@ -1206,6 +1219,89 @@ function renderCal(force) {
 }
 function setDatum(jahr, tag) { write(() => put('gruppe', { id: 'stand', jahr, tag }), 'Datum: ' + datumText(jahr, tag)).then(() => { calSel = tag; calView = { jahr, m: fromDoy(tag)[0] }; renderCal(true); }); }
 
+/* ── Ruf der Gruppe ── */
+let RUFL = [], RUFW = {};
+const STUFEN = [
+  { w: -2, name: 'Feindselig', text: 'Man schickt euch weg oder greift euch an.' },
+  { w: -1, name: 'Misstrauisch', text: 'Auskünfte nur gegen Leistung, die Preise steigen.' },
+  { w: 0, name: 'Geduldet', text: 'Normale Behandlung, Grundhilfe ist offen.' },
+  { w: 1, name: 'Geachtet', text: 'Hinweise und kleine Gefälligkeiten.' },
+  { w: 2, name: 'Angesehen', text: 'Besondere Zugänge öffnen sich.' },
+  { w: 3, name: 'Verbündet', text: 'Sie handeln für euch.' }
+];
+const stufe = w => STUFEN.find(s => s.w === w) || STUFEN[2];
+function openRuf() {
+  if (ovlKind === 'ruf') return closeOverlay();
+  closeOverlay(); ovlKind = 'ruf'; $('btnRuf').setAttribute('aria-pressed', 'true');
+  renderRuf(true);
+}
+function rufBar(w, farbe, aktiv) {
+  const bar = h('div', 'rufbar'); bar.setAttribute('aria-hidden', 'true');
+  STUFEN.forEach(s => { const seg = h('span', s.w === 0 ? 'mid' : null); if (aktiv && ((w >= 0 && s.w > 0 && s.w <= w) || (w < 0 && s.w < 0 && s.w >= w) || (s.w === 0 && w === 0))) seg.style.background = s.w < 0 ? 'var(--crit)' : (farbe || 'var(--ember)'); bar.appendChild(seg); });
+  return bar;
+}
+function renderRuf(force) {
+  if (ovlKind !== 'ruf') return;
+  if (!force && panelBusy() && $('ovl')) { panelPending = true; return; }
+  let o = $('ovl'); const keep = o ? o.scrollTop : 0;
+  if (!o) { o = h('div', 'overlay'); o.id = 'ovl'; o.onclick = e => { if (e.target === o) closeOverlay(); }; $('stage').appendChild(o); }
+  o.innerHTML = '';
+  const sh = h('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Ruf der Gruppe');
+  const hd = h('h2', null, '<span>Ruf der Gruppe</span>'); const x = h('button', 'iconbtn', 'Schließen'); x.onclick = closeOverlay; hd.appendChild(x); sh.appendChild(hd);
+  sh.appendChild(h('p', 'cal-heute', 'Wie euch Ethnien und Institutionen sehen. „Unbekannt“ heißt: Ihr wisst es (noch) nicht.'));
+  const gruppen = [['ethnie', 'Ethnien'], ['institution', 'Institutionen']];
+  gruppen.forEach(([art, titel]) => {
+    const list = RUFL.filter(r => r.art === art).sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'de'));
+    if (!list.length) return;
+    sh.appendChild(h('div', 'cal-sub', titel));
+    list.forEach(r => {
+      const v = RUFW[r.id];
+      const kennt = v && (v.bekannt || DMMODE);
+      const row = h('div', 'rufrow');
+      const top = h('div', 'rufhead');
+      top.appendChild(h('span', 'rufname', esc(r.name) + (r.geheim ? ' <small>(geheim)</small>' : '')));
+      top.appendChild(h('span', 'rufstufe', kennt ? esc(stufe(v.wert).name) + (DMMODE && !v.bekannt ? ' · SC unbekannt' : '') : 'unbekannt'));
+      row.appendChild(top);
+      row.appendChild(rufBar(v ? v.wert : 0, r.farbe, kennt));
+      if (kennt && stufe(v.wert).w !== 0) row.appendChild(h('div', 'rufinfo', esc(stufe(v.wert).text)));
+      if (kennt && v.grund) row.appendChild(h('div', 'rufgrund', mdText(v.grund)));
+      if (DMMODE) row.appendChild(rufEdit(r, v));
+      sh.appendChild(row);
+    });
+  });
+  if (DMMODE) {
+    const neu = h('details', 'listedit'); neu.appendChild(h('summary', 'state', 'Neue Ethnie oder Institution'));
+    const nm = h('input'); nm.type = 'text'; nm.placeholder = 'Name'; neu.appendChild(nm);
+    const art = h('select'); [['institution', 'Institution'], ['ethnie', 'Ethnie']].forEach(([v, l]) => { const op = h('option', null, l); op.value = v; art.appendChild(op); }); neu.appendChild(art);
+    const lab = h('label'); const gh = h('input'); gh.type = 'checkbox'; lab.appendChild(gh); lab.appendChild(document.createTextNode(' geheim (nur für dich sichtbar)')); neu.appendChild(lab);
+    const b = h('button', 'iconbtn', 'Anlegen'); b.type = 'button';
+    b.onclick = () => { const n = nm.value.trim(); if (!n) return say('Bitte einen Namen eintragen.', 3000); const id = n.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'eintrag-' + Date.now().toString(36);
+      write(async () => { await put('ruf_liste', { id, name: n, art: art.value, ord: 50, geheim: gh.checked }); await put('ruf_wert', { id, wert: 0, bekannt: false, grund: '' }); }, 'Angelegt.').then(() => renderRuf(true)); };
+    neu.appendChild(b); sh.appendChild(neu);
+  }
+  sh.appendChild(h('div', 'rufleg', STUFEN.map(s => `<span><b>${esc(s.name)}</b> ${esc(s.text)}</span>`).join('')));
+  o.appendChild(sh); o.scrollTop = keep;
+}
+function rufEdit(r, v) {
+  v = v || { wert: 0, bekannt: false, grund: '' };
+  const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', 'Ändern'));
+  const sel = h('select'); sel.setAttribute('aria-label', 'Stufe');
+  STUFEN.forEach(s => { const op = h('option', null, s.name); op.value = s.w; if (s.w === v.wert) op.selected = true; sel.appendChild(op); });
+  f.appendChild(sel);
+  const lab = h('label'); const kb = h('input'); kb.type = 'checkbox'; kb.checked = !!v.bekannt; lab.appendChild(kb); lab.appendChild(document.createTextNode(' Die SC kennen ihren Ruf hier')); f.appendChild(lab);
+  const gr = h('textarea'); gr.rows = 2; gr.value = v.grund || ''; gr.placeholder = 'Warum? (für die Gruppe sichtbar, wenn bekannt)'; f.appendChild(gr);
+  const row = h('div', 'btnrow');
+  const sv = h('button', 'iconbtn', 'Speichern'); sv.type = 'button';
+  sv.onclick = () => write(() => put('ruf_wert', { id: r.id, wert: +sel.value, bekannt: kb.checked, grund: gr.value.trim() }), 'Ruf gespeichert.').then(() => renderRuf(true));
+  row.appendChild(sv);
+  const del = h('button', 'iconbtn', 'Entfernen'); del.type = 'button';
+  del.onclick = () => write(() => del_('ruf_liste', r.id), 'Entfernt.').then(() => renderRuf(true));
+  row.appendChild(del);
+  f.appendChild(row);
+  return f;
+}
+const del_ = (t, id) => sb.from(t).delete().eq('id', id).then(chk);
+
 /* ── Aktualisieren nach neuen Daten ── */
 let netErr = false, refreshQ = false, wLoaded = false, pendingStart = null;
 function refresh() {
@@ -1234,7 +1330,7 @@ let sb = null;
 const toMapById = rows => Object.fromEntries((rows || []).map(r => [r.id, r]));
 async function loadTable(t) {
   const r = await sb.from(t).select('*');
-  if (r.error) throw r.error;
+  if (r.error) { if (OPTIONAL.has(t)) return []; throw r.error; }
   return r.data || [];
 }
 const LOADERS = {
@@ -1243,8 +1339,11 @@ const LOADERS = {
   quest: rows => { Q = toMapById(rows); },
   npc: rows => { NP = toMapById(rows); },
   notiz: rows => { NOTES = rows; },
-  vorrat: rows => { VOR = toMapById(rows); }
+  vorrat: rows => { VOR = toMapById(rows); },
+  ruf_liste: rows => { RUFL = rows; },
+  ruf_wert: rows => { RUFW = toMapById(rows); }
 };
+const OPTIONAL = new Set(['ruf_liste', 'ruf_wert']);
 async function reload(only) {
   if (!sb) return;
   const tabs = only ? [only] : Object.keys(LOADERS).filter(t => t !== 'vorrat' || OWNER);
@@ -1320,8 +1419,9 @@ function openLogin() {
   o.appendChild(sh); $('stage').appendChild(o);
 }
 const _renderOverlay = renderOverlay;
-renderOverlay = function (force) { if (ovlKind === 'login') return; if (ovlKind === 'cal') return renderCal(force); return _renderOverlay(force); };
+renderOverlay = function (force) { if (ovlKind === 'login') return; if (ovlKind === 'cal') return renderCal(force); if (ovlKind === 'ruf') return renderRuf(force); return _renderOverlay(force); };
 $('btnCal').onclick = openCal;
+$('btnRuf').onclick = openRuf;
 $('btnDM').onclick = () => { DMMODE = !DMMODE; store.set('dm', DMMODE); $('btnDM').setAttribute('aria-pressed', String(DMMODE)); refresh(); };
 
 /* ── Start ── */
