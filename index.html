@@ -231,6 +231,15 @@ ul.plain li::marker { color: var(--faint); }
 .cal-det h4 { margin: 0; font-size: 15px; font-weight: 500; }
 .cal-det p { margin: 0; }
 .cal-fest { color: #9fe3ff; font-size: 14px; }
+.vaultbox { display: grid; gap: 6px; border-top: 1px solid rgba(242,166,90,.3); padding-top: 8px; }
+.vaultbox h4 { margin: 0; }
+.vfile { display: grid; gap: 4px; }
+.vtitle { font-size: 13px; color: var(--text); font-weight: 500; cursor: pointer; }
+.vsec { border: 1px solid var(--line-soft); border-radius: 6px; padding: 4px 8px; background: rgba(0,0,0,.12); }
+.vsec summary { cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.vsec summary small { color: var(--faint); font-size: 11px; }
+.vsec .draft { margin: 6px 0; max-height: 260px; }
+.vsec button { margin-bottom: 4px; }
 .cal-sub { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
 .cal-det textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px; }
 .netstate { position: absolute; left: 12px; bottom: 64px; z-index: 4; max-width: min(420px, calc(100% - 24px)); font-size: 12.5px; color: var(--muted); background: rgba(12,17,28,.86); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
@@ -818,7 +827,7 @@ function dmBox(id) {
   const n = N[id], box = h('div', 'dmbox');
   box.innerHTML = `<h4>Spielleitung · ${esc(id)}</h4><div class="state">${known(id) ? 'Freigegeben: die Gruppe sieht diesen Text.' : 'Nicht freigegeben: die Gruppe sieht ' + (isPin(n) ? 'diesen Ort nicht.' : 'nur Name und Umriss.')}</div>`;
   const v = VOR[id];
-  if (v && v.text && (!known(id) || v.text !== W[id].text)) { box.appendChild(h('div', 'state', 'Vorrat (nur für dich, bitte vor dem Freigeben prüfen und kürzen):')); box.appendChild(h('div', 'draft', esc(v.text))); }
+  if (v && v.text && (!known(id) || v.text !== W[id].text)) { box.appendChild(h('div', 'state', 'Kurzfassung aus der DM-Karte (nur für dich):')); box.appendChild(h('div', 'draft', esc(v.text))); }
   const ta = h('textarea'); ta.rows = 6; ta.value = known(id) ? (W[id].text || '') : ''; ta.placeholder = 'Was die Gruppe hierüber weiß …'; ta.setAttribute('aria-label', 'Freigegebener Text'); box.appendChild(ta);
   let kc = null;
   if (n.map && id !== 'world') { const lab = h('label'); kc = h('input'); kc.type = 'checkbox'; kc.checked = !!(W[id] && W[id].karte); lab.appendChild(kc); lab.appendChild(document.createTextNode(' Karte dieses Ortes freigeben')); box.appendChild(lab); }
@@ -829,6 +838,7 @@ function dmBox(id) {
   if (v && v.text) { const cp = h('button', 'iconbtn', 'Vorrat übernehmen'); cp.onclick = () => { ta.value = v.text; ta.focus(); }; row.appendChild(cp); }
   if (known(id)) { const rm = h('button', 'iconbtn', 'Zurückziehen'); rm.onclick = () => write(() => del('wissen', id), 'Zurückgezogen.').then(() => renderPanel(true)); row.appendChild(rm); }
   box.appendChild(row);
+  if (v && v.vault) box.appendChild(vaultBox(v.vault, ta));
   const row2 = h('div', 'btnrow');
   const here = h('button', 'iconbtn', 'Gruppe ist jetzt hier');
   here.onclick = () => { const r = (G && G.route || []).slice(); if (r[r.length - 1] !== id) r.push(id); write(() => put('gruppe', { id: 'stand', pos: id, route: r, stand: G && G.stand || '' }), 'Position gesetzt.'); };
@@ -904,6 +914,34 @@ $('btnQuests').onclick = () => openOverlay('quest');
 $('btnNpcs').onclick = () => openOverlay('npc');
 document.addEventListener('focusout', () => setTimeout(() => { if (panelPending && !panelBusy()) { renderPanel(true); renderOverlay(true); } }, 0));
 
+
+/* Vault-Inhalte im Spielleitungs-Kasten: Abschnitte einzeln ins Textfeld übernehmen */
+function vaultBox(vlt, ta) {
+  const wrap = h('div', 'vaultbox');
+  wrap.appendChild(h('h4', null, 'Aus dem Vault (nur für dich)'));
+  const add = txt => { ta.value = (ta.value.trim() ? ta.value.trim() + '\n\n' : '') + txt.trim(); ta.focus(); say('Übernommen – bitte vor dem Freigeben kürzen.', 2500); };
+  const abschnitt = (titel, text, quelle) => {
+    const d = h('details', 'vsec');
+    const s = h('summary'); s.innerHTML = `<span>${esc(titel || 'Einleitung')}</span>${quelle ? `<small>${esc(quelle)}</small>` : ''}`; d.appendChild(s);
+    d.appendChild(h('div', 'draft', esc(text)));
+    const b = h('button', 'iconbtn', 'Ins Textfeld übernehmen'); b.type = 'button'; b.onclick = () => add(text); d.appendChild(b);
+    return d;
+  };
+  (vlt.dateien || []).forEach(f => {
+    const g = h('div', 'vfile');
+    g.appendChild(h('div', 'vtitle', '📄 ' + esc(f.datei)));
+    if (f.leer || !f.abschnitte.length) g.appendChild(h('p', 'unknown', 'Diese Datei ist im Vault noch leer.'));
+    f.abschnitte.forEach(a => g.appendChild(abschnitt(a.titel, a.text)));
+    wrap.appendChild(g);
+  });
+  if ((vlt.erwaehnungen || []).length) {
+    const g = h('details', 'vfile');
+    g.appendChild(h('summary', 'vtitle', `🔎 Erwähnungen in anderen Vault-Dateien (${vlt.erwaehnungen.length})`));
+    vlt.erwaehnungen.forEach(m => g.appendChild(abschnitt(m.titel || m.datei, m.text, m.datei)));
+    wrap.appendChild(g);
+  }
+  return wrap;
+}
 /* ── Ebenen & Legende ── */
 function renderPop() {
   const pop = $('pop'); pop.innerHTML = '<h3>Ebenen</h3>';
