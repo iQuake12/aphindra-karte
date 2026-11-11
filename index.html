@@ -231,6 +231,7 @@ ul.plain li::marker { color: var(--faint); }
 .cal-det h4 { margin: 0; font-size: 15px; font-weight: 500; }
 .cal-det p { margin: 0; }
 .cal-fest { color: #9fe3ff; font-size: 14px; }
+.cal-sub { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
 .cal-det textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px; }
 .netstate { position: absolute; left: 12px; bottom: 64px; z-index: 4; max-width: min(420px, calc(100% - 24px)); font-size: 12.5px; color: var(--muted); background: rgba(12,17,28,.86); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .wtext p { margin: 0 0 10px; font-size: 15px; }
@@ -1111,7 +1112,7 @@ function renderCal(force) {
     if (jahr === hj && doy === ht) c.classList.add('heute');
     if (jahr < hj || (jahr === hj && doy < ht)) c.classList.add('vorbei');
     if (calSel === doy) c.classList.add('sel');
-    c.innerHTML = `<span class="n">${d}</span><span class="m">${mi.neu || mi.voll ? mi.g : ''}</span>${fe.length ? '<i class="f" title="Fest oder Himmelsereignis"></i>' : ''}${chron[chronikKey(jahr, doy)] ? '<i class="c" title="Eintrag der Gruppe"></i>' : ''}`;
+    c.innerHTML = `<span class="n">${d}</span><span class="m">${mi.neu || mi.voll ? mi.g : ''}</span>${fe.length ? '<i class="f" title="Fest oder Himmelsereignis"></i>' : ''}${chron[chronikKey(jahr, doy)] || NOTES.some(x => x.ort === 'kal:' + chronikKey(jahr, doy)) ? '<i class="c" title="Was geschah"></i>' : ''}`;
     c.setAttribute('aria-label', datumText(jahr, doy));
     c.onclick = () => { calSel = doy; renderCal(true); };
     grid.appendChild(c);
@@ -1125,16 +1126,41 @@ function renderCal(force) {
     det.innerHTML = `<h4>${esc(datumText(jahr, calSel))}</h4><p class="state">${mi.g} ${esc(mi.name)}</p>`;
     festeAm(jahr, m, d).forEach(f => det.appendChild(h('p', 'cal-fest', '✦ ' + esc(f))));
     const txt = chron[chronikKey(jahr, calSel)];
-    if (txt) det.appendChild(h('div', 'wtext', mdText(txt)));
-    else if (!DMMODE) det.appendChild(h('p', 'unknown', jahr < hj || (jahr === hj && calSel <= ht) ? 'Kein Eintrag.' : 'Noch nicht geschehen.'));
+    const kort = 'kal:' + chronikKey(jahr, calSel);
+    const eintr = notesFor(kort);
+    if (txt) { if (eintr.length || DMMODE) det.appendChild(h('div', 'cal-sub', 'Spielleitung')); det.appendChild(h('div', 'wtext', mdText(txt))); }
+    else if (!DMMODE && !eintr.length) det.appendChild(h('p', 'unknown', jahr < hj || (jahr === hj && calSel <= ht) ? 'Noch kein Eintrag.' : 'Noch nicht geschehen.'));
     if (DMMODE) {
-      const ta = h('textarea'); ta.rows = 3; ta.value = txt || ''; ta.placeholder = 'Was an diesem Tag geschah (für die Gruppe sichtbar)'; ta.setAttribute('aria-label', 'Eintrag');
+      const ta = h('textarea'); ta.rows = 3; ta.value = txt || ''; ta.placeholder = 'Eintrag der Spielleitung (für alle sichtbar)'; ta.setAttribute('aria-label', 'Eintrag');
       const row = h('div', 'btnrow');
       const sv = h('button', 'iconbtn', 'Eintrag speichern');
       sv.onclick = () => { const c = Object.assign({}, chron); const v = ta.value.trim(); if (v) c[chronikKey(jahr, calSel)] = v; else delete c[chronikKey(jahr, calSel)]; write(() => put('gruppe', { id: 'stand', chronik: c }), 'Gespeichert.').then(() => renderCal(true)); };
       const hier = h('button', 'iconbtn', 'Heute ist dieser Tag'); hier.onclick = () => setDatum(jahr, calSel);
       row.appendChild(sv); row.appendChild(hier);
       det.appendChild(ta); det.appendChild(row);
+    }
+    // Einträge der Gruppe
+    if (eintr.length) { det.appendChild(h('div', 'cal-sub', 'Die Gruppe')); eintr.forEach(x => det.appendChild(noteEl(x))); }
+    if (sb) {
+      const f = h('form', 'noteform');
+      f.innerHTML = `<input type="text" id="kn" maxlength="40" placeholder="Dein Name" aria-label="Dein Name" value="${esc(store.get('name', ''))}"${store.get('name', '') ? ' hidden' : ''}><textarea id="kt" rows="2" maxlength="1200" placeholder="Was ist an diesem Tag passiert?" aria-label="Eintrag für diesen Tag"></textarea><button class="iconbtn" type="submit">Eintragen</button>`;
+      const nm = store.get('name', '');
+      if (nm) {
+        const line = h('div', 'who'); line.innerHTML = `<span>Du schreibst als <b>${esc(nm)}</b></span>`;
+        const ch = h('button', null, 'Name ändern'); ch.type = 'button';
+        ch.onclick = () => { line.hidden = true; const i = f.querySelector('#kn'); i.hidden = false; i.focus(); i.select(); };
+        line.appendChild(ch); f.insertBefore(line, f.firstChild);
+      }
+      f.querySelector('#kn').addEventListener('change', e => { const v = e.target.value.trim(); if (v) store.set('name', v); });
+      f.onsubmit = e => {
+        e.preventDefault();
+        const v = f.querySelector('#kt').value.trim(); if (!v) return;
+        const n = f.querySelector('#kn').value.trim();
+        if (!n) { f.querySelector('#kn').hidden = false; f.querySelector('#kn').focus(); return say('Bitte zuerst deinen Namen eintragen.', 3000); }
+        store.set('name', n);
+        addNote(kort, v).then(ok => { if (ok) renderCal(true); });
+      };
+      det.appendChild(f);
     }
     sh.appendChild(det);
   }
