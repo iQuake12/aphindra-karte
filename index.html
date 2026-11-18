@@ -279,6 +279,7 @@ svg.placing { cursor: crosshair; }
 .rufbar span.mid { border-color: var(--line); }
 .rufinfo { font-size: 13px; color: var(--muted); }
 .rufgrund { font-size: 14px; } .rufgrund p { margin: 0; }
+.rufrow.rufsub { margin-left: 18px; padding-left: 10px; border-left: 2px solid var(--line-soft); }
 .rufleg { margin-top: 12px; display: grid; gap: 2px; font-size: 12px; color: var(--faint); }
 .rufleg b { color: var(--muted); font-weight: 500; }
 .listedit select, .listedit label { font-size: 13px; }
@@ -1340,32 +1341,38 @@ function renderRuf(force) {
   sh.appendChild(h('p', 'cal-heute', 'Wie euch Ethnien und Institutionen sehen. „Unbekannt“ heißt: Ihr wisst es (noch) nicht.'));
   const gruppen = [['ethnie', 'Ethnien'], ['institution', 'Institutionen']];
   gruppen.forEach(([art, titel]) => {
-    const list = RUFL.filter(r => r.art === art).sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'de'));
+    const list = RUFL.filter(r => r.art === art && !r.ueber).sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'de'));
     if (!list.length) return;
     sh.appendChild(h('div', 'cal-sub', titel));
-    list.forEach(r => {
+    const zeile = (r, sub) => {
       const v = RUFW[r.id];
       const kennt = v && (v.bekannt || DMMODE);
-      const row = h('div', 'rufrow');
+      const row = h('div', sub ? 'rufrow rufsub' : 'rufrow');
       const top = h('div', 'rufhead');
       top.appendChild(h('span', 'rufname', esc(r.name) + (r.geheim ? ' <small>(geheim)</small>' : '')));
       top.appendChild(h('span', 'rufstufe', kennt ? esc(stufe(v.wert).name) + (DMMODE && !v.bekannt ? ' · SC unbekannt' : '') : 'unbekannt'));
       row.appendChild(top);
-      row.appendChild(rufBar(v ? v.wert : 0, r.farbe, kennt));
+      row.appendChild(rufBar(v ? v.wert : 0, r.farbe || (sub && sub.farbe), kennt));
       if (kennt && stufe(v.wert).w !== 0) row.appendChild(h('div', 'rufinfo', esc(stufe(v.wert).text)));
       if (kennt && v.grund) row.appendChild(h('div', 'rufgrund', mdText(v.grund)));
       if (DMMODE) row.appendChild(rufEdit(r, v));
       sh.appendChild(row);
+    };
+    list.forEach(r => {
+      zeile(r, null);
+      RUFL.filter(c => c.ueber === r.id).sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'de')).forEach(c => zeile(c, r));
     });
   });
   if (DMMODE) {
     const neu = h('details', 'listedit'); neu.appendChild(h('summary', 'state', 'Neue Ethnie oder Institution'));
     const nm = h('input'); nm.type = 'text'; nm.placeholder = 'Name'; neu.appendChild(nm);
     const art = h('select'); [['institution', 'Institution'], ['ethnie', 'Ethnie']].forEach(([v, l]) => { const op = h('option', null, l); op.value = v; art.appendChild(op); }); neu.appendChild(art);
+    const ub = h('select'); ub.setAttribute('aria-label', 'Gehört zu'); ub.appendChild(Object.assign(h('option', null, 'eigenständig'), { value: '' }));
+    RUFL.filter(r => r.art === 'ethnie' && !r.ueber).sort((a, b) => a.ord - b.ord).forEach(r => { const op = h('option', null, 'Untergruppe von ' + r.name); op.value = r.id; ub.appendChild(op); }); neu.appendChild(ub);
     const lab = h('label'); const gh = h('input'); gh.type = 'checkbox'; lab.appendChild(gh); lab.appendChild(document.createTextNode(' geheim (nur für dich sichtbar)')); neu.appendChild(lab);
     const b = h('button', 'iconbtn', 'Anlegen'); b.type = 'button';
     b.onclick = () => { const n = nm.value.trim(); if (!n) return say('Bitte einen Namen eintragen.', 3000); const id = n.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'eintrag-' + Date.now().toString(36);
-      write(async () => { await put('ruf_liste', { id, name: n, art: art.value, ord: 50, geheim: gh.checked }); await put('ruf_wert', { id, wert: 0, bekannt: false, grund: '' }); }, 'Angelegt.').then(() => renderRuf(true)); };
+      write(async () => { await put('ruf_liste', Object.assign({ id, name: n, art: ub.value ? 'ethnie' : art.value, ord: 50, geheim: gh.checked }, ub.value ? { ueber: ub.value } : {})); await put('ruf_wert', { id, wert: 0, bekannt: false, grund: '' }); }, 'Angelegt.').then(() => renderRuf(true)); };
     neu.appendChild(b); sh.appendChild(neu);
   }
   sh.appendChild(h('div', 'rufleg', STUFEN.map(s => `<span><b>${esc(s.name)}</b> ${esc(s.text)}</span>`).join('')));
@@ -1378,10 +1385,11 @@ function rufEdit(r, v) {
   STUFEN.forEach(s => { const op = h('option', null, s.name); op.value = s.w; if (s.w === v.wert) op.selected = true; sel.appendChild(op); });
   f.appendChild(sel);
   const lab = h('label'); const kb = h('input'); kb.type = 'checkbox'; kb.checked = !!v.bekannt; lab.appendChild(kb); lab.appendChild(document.createTextNode(' Die SC kennen ihren Ruf hier')); f.appendChild(lab);
+  const lg = h('label'); const gb = h('input'); gb.type = 'checkbox'; gb.checked = !!r.geheim; lg.appendChild(gb); lg.appendChild(document.createTextNode(' geheim (Gruppe sieht den Eintrag gar nicht)')); f.appendChild(lg);
   const gr = h('textarea'); gr.rows = 2; gr.value = v.grund || ''; gr.placeholder = 'Warum? (für die Gruppe sichtbar, wenn bekannt)'; f.appendChild(gr);
   const row = h('div', 'btnrow');
   const sv = h('button', 'iconbtn', 'Speichern'); sv.type = 'button';
-  sv.onclick = () => write(() => put('ruf_wert', { id: r.id, wert: +sel.value, bekannt: kb.checked, grund: gr.value.trim() }), 'Ruf gespeichert.').then(() => renderRuf(true));
+  sv.onclick = () => write(async () => { if (gb.checked !== !!r.geheim) { const l = Object.assign({}, r, { geheim: gb.checked }); await put('ruf_liste', l); } await put('ruf_wert', { id: r.id, wert: +sel.value, bekannt: kb.checked, grund: gr.value.trim() }); }, 'Ruf gespeichert.').then(() => renderRuf(true));
   row.appendChild(sv);
   const del = h('button', 'iconbtn', 'Entfernen'); del.type = 'button';
   del.onclick = () => write(() => del_('ruf_liste', r.id), 'Entfernt.').then(() => renderRuf(true));
