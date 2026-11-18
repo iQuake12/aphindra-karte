@@ -327,6 +327,45 @@ svg.placing { cursor: crosshair; }
   .glow.pulse, .party .halo { animation: none; }
   .shape { transition: none; }
 }
+
+/* Menü mit Reitern, Reise-Tagebuch, Ortsstatus (18.11.2026) */
+.app { grid-template-rows: auto auto minmax(0,1fr); }
+.tabs { grid-column: 1 / -1; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); background: var(--ink-2); border-bottom: 1px solid var(--line-soft); }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { border: 0; background: none; color: var(--muted); padding: 6px 12px; border-radius: 999px; font-size: 14px; white-space: nowrap; }
+.tab:hover { color: var(--text); background: var(--line-soft); }
+.tab[aria-pressed="true"] { color: var(--ink); background: var(--ember); }
+.sheet.tb { width: min(720px, 100%); }
+.tb-search { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; margin: 2px 0 6px; font-size: 14px; }
+.tb-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tb-head b { font-family: var(--f-display); font-weight: 400 !important; font-size: 19px; }
+.tb-head small { color: var(--faint); font-size: 12px; }
+.tb-entry .q-text p { margin: 6px 0; color: var(--text); font-size: 14px; }
+.tb-row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 4px 0; }
+.tb-lab { font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-right: 2px; }
+.tb-chip { border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 2px 9px; font-size: 13px; color: var(--text); }
+button.tb-chip:hover { border-color: var(--ember); }
+.tb-chip.k { color: #f3a99d; border-color: rgba(239,122,106,.4); }
+.tb-chip.q { color: var(--gold); }
+.tb-notes summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 6px; }
+.noteform input[type=text] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 14px; }
+.ostline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ostline small { color: var(--faint); font-size: 12px; }
+.ostbadge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--c, var(--line)); color: var(--c, var(--text)); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+.ostbadge.small { font-size: 12px; color: var(--muted); border-color: var(--line); }
+.ostbadge i, .ostleg i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ostmine { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.ostform { display: flex; gap: 6px; margin-top: 6px; }
+.ostform select { flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; }
+.ostform.dm select { border-color: rgba(242,166,90,.5); }
+.ostleg { display: grid; gap: 4px; font-size: 13px; margin-top: 14px; }
+.ostleg h3 { margin: 0 0 4px !important; }
+.ostleg i { margin-right: 6px; }
+@media (max-width: 860px) {
+  .app { grid-template-rows: auto auto minmax(0, 58fr) minmax(0, 42fr); }
+  .tabs { padding-top: 4px; padding-bottom: 4px; }
+  .tab { font-size: 13px; padding: 5px 10px; }
+}
 </style>
 
 </head>
@@ -952,7 +991,7 @@ function editForm(kind, id, d) {
     write(() => put(kind, Object.assign({ id: key }, body)), 'Gespeichert.').then(ok => { if (ok) renderOverlay(true); });
   };
   row.appendChild(sv);
-  if (id) { const del = h('button', 'iconbtn', 'Entfernen'); del.onclick = () => write(() => del(kind, id), 'Entfernt.').then(() => renderOverlay(true)); row.appendChild(del); }
+  if (id) { const rm = h('button', 'iconbtn', 'Entfernen'); rm.onclick = () => write(() => del(kind, id), 'Entfernt.').then(() => renderOverlay(true)); row.appendChild(rm); }
   f.appendChild(row);
   return f;
 }
@@ -1645,6 +1684,224 @@ $('btnCal').onclick = openCal;
 $('btnRuf').onclick = openRuf;
 $('btnMarks').onclick = openMarks;
 $('btnDM').onclick = () => { DMMODE = !DMMODE; store.set('dm', DMMODE); $('btnDM').setAttribute('aria-pressed', String(DMMODE)); refresh(); };
+
+
+/* ── Menü mit Reitern · Reise-Tagebuch · Ortsstatus (18.11.2026) ── */
+let TB = {}, OST = {}, OEIN = [], tbQ = '';
+LOADERS.tagebuch = rows => { TB = toMapById(rows); };
+LOADERS.ort_status = rows => { OST = toMapById(rows); };
+LOADERS.ort_einschaetzung = rows => { OEIN = rows; };
+['tagebuch', 'ort_status', 'ort_einschaetzung'].forEach(t => OPTIONAL.add(t));
+const OSTATI = [
+  ['gehoert', 'gehört von', '#9fb4d8'],
+  ['besucht', 'besucht', '#e9d37c'],
+  ['basis', 'Basis', '#7fd49a'],
+  ['sicher', 'sicher', '#63d6c4'],
+  ['gefaehrlich', 'gefährlich', '#ef7a6a'],
+  ['zerstoert', 'zerstört', '#8a90a6'],
+  ['geheilt', 'Wunde geheilt', '#bb94ff']
+];
+const ostInfo = s => OSTATI.find(x => x[0] === s);
+const visited = id => !!(G && Array.isArray(G.route) && G.route.includes(id));
+const statusOf = id => (OST[id] && OST[id].status) || (visited(id) ? 'besucht' : null);
+const slug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/* Menü: zweite Leiste mit Reitern */
+(function buildTabs() {
+  const nav = h('nav', 'tabs'); nav.id = 'tabs'; nav.setAttribute('aria-label', 'Bereiche');
+  const mk = (id, label) => { let b = $(id); if (!b) { b = h('button', 'tab', label); b.id = id; } b.className = 'tab'; b.setAttribute('aria-pressed', 'false'); nav.appendChild(b); return b; };
+  mk('btnMap', 'Karte').onclick = () => closeOverlay();
+  mk('btnTb', 'Reise-Tagebuch');
+  mk('btnQuests'); mk('btnNpcs'); mk('btnMarks'); mk('btnRuf');
+  document.querySelector('header.bar').after(nav);
+})();
+const TABMAP = { tb: 'btnTb', quest: 'btnQuests', npc: 'btnNpcs', marks: 'btnMarks', mark: 'btnMarks', ruf: 'btnRuf', cal: 'btnCal' };
+function syncTabs() {
+  const act = $('ovl') ? TABMAP[ovlKind] : null;
+  document.querySelectorAll('#tabs .tab').forEach(b => b.setAttribute('aria-pressed', String(act ? b.id === act : b.id === 'btnMap')));
+  if ($('btnCal')) $('btnCal').setAttribute('aria-pressed', String(act === 'btnCal'));
+}
+new MutationObserver(syncTabs).observe($('stage'), { childList: true });
+
+/* Reise-Tagebuch */
+function openTb() {
+  if (ovlKind === 'tb') return closeOverlay();
+  closeOverlay(); ovlKind = 'tb'; renderTb(true);
+}
+$('btnTb').onclick = openTb;
+const arrIn = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+function tbChips(label, ids, kind) {
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return null;
+  const row = h('div', 'tb-row'); row.appendChild(h('span', 'tb-lab', esc(label)));
+  list.forEach(x => {
+    if (kind === 'ort') {
+      if (!N[x] || !(known(x) || DMMODE)) return;
+      const b = h('button', 'tb-chip', esc(N[x].name)); b.onclick = () => { closeOverlay(); go(x); }; row.appendChild(b);
+    } else if (kind === 'quest') {
+      const q = Q[x]; const b = h('button', 'tb-chip q', esc(q ? q.name : x)); b.onclick = () => openOverlay('quest'); row.appendChild(b);
+    } else row.appendChild(h('span', 'tb-chip k', esc(x)));
+  });
+  return row.children.length > 1 ? row : null;
+}
+function tbNoteForm(key, after) {
+  const f = h('form', 'noteform');
+  const nmNow = store.get('name', '');
+  f.innerHTML = `<input type="text" maxlength="40" placeholder="Dein Name" aria-label="Dein Name" value="${esc(nmNow)}"${nmNow ? ' hidden' : ''}><textarea rows="2" maxlength="1200" placeholder="Eigener Eintrag zu dieser Session …" aria-label="Eigener Eintrag"></textarea><button class="iconbtn" type="submit">Eintrag speichern</button>`;
+  f.onsubmit = e => {
+    e.preventDefault();
+    const nm = f.querySelector('input').value.trim(), v = f.querySelector('textarea').value.trim();
+    if (!v) return;
+    if (!nm) { f.querySelector('input').hidden = false; f.querySelector('input').focus(); return say('Bitte zuerst deinen Namen eintragen.', 3000); }
+    store.set('name', nm);
+    addNote(key, v).then(ok => { if (ok) { f.querySelector('textarea').value = ''; after(); } });
+  };
+  return f;
+}
+function renderTb(force) {
+  if (ovlKind !== 'tb') return;
+  if (!force && panelBusy() && $('ovl')) { panelPending = true; return; }
+  let o = $('ovl'); const keep = o ? o.scrollTop : 0;
+  if (!o) { o = h('div', 'overlay'); o.id = 'ovl'; o.onclick = e => { if (e.target === o) closeOverlay(); }; $('stage').appendChild(o); }
+  o.innerHTML = '';
+  const sh = h('div', 'sheet tb'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Reise-Tagebuch');
+  const hd = h('h2', null, '<span>Reise-Tagebuch</span>'); const x = h('button', 'iconbtn', 'Schließen'); x.onclick = closeOverlay; hd.appendChild(x); sh.appendChild(hd);
+  sh.appendChild(h('p', 'cal-heute', 'Was die Gruppe erlebt hat, Session für Session: Orte, Kämpfe, Aufträge. Unter jedem Eintrag könnt ihr eigene Erinnerungen ergänzen.'));
+  const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Tagebuch suchen …'; s.value = tbQ; s.setAttribute('aria-label', 'Im Tagebuch suchen');
+  s.oninput = () => { tbQ = s.value; const pos = s.selectionStart; renderTb(true); const n = sh.ownerDocument.querySelector('.tb-search'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
+  sh.appendChild(s);
+  const q = tbQ.trim().toLowerCase();
+  const list = Object.values(TB).sort((a, b) => (b.ord ?? 0) - (a.ord ?? 0));
+  const hits = list.filter(e => {
+    if (!q) return true;
+    const notes = NOTES.filter(n => n.ort === 'tb:' + e.id).map(n => n.text).join(' ');
+    const names = [...(e.orte || []).map(i => N[i] ? N[i].name : ''), ...(e.quests_neu || []).map(i => Q[i] ? Q[i].name : i), ...(e.kaempfe || [])].join(' ');
+    return [e.titel, e.datum, e.text, notes, names, 'session ' + e.session].join(' ').toLowerCase().includes(q);
+  });
+  if (!list.length) sh.appendChild(h('p', 'empty', 'Noch keine Einträge.'));
+  else if (!hits.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden.'));
+  hits.forEach(e => {
+    const it = h('article', 'item tb-entry');
+    it.innerHTML = `<div class="tb-head"><span class="chip">Session ${esc(e.session ?? '–')}</span><b>${esc(e.titel)}</b><small>${esc(e.datum)}</small></div><div class="q-text">${mdText(e.text || '')}</div>`;
+    [tbChips('Orte', e.orte, 'ort'), tbChips('Kämpfe', e.kaempfe, 'k'), tbChips('Neue Aufträge', e.quests_neu, 'quest'), tbChips('Erledigt', e.quests_erledigt, 'quest')].forEach(r => r && it.appendChild(r));
+    const key = 'tb:' + e.id;
+    const notes = notesFor(key);
+    const d = h('details', 'tb-notes'); if (notes.length) d.open = true;
+    d.appendChild(h('summary', null, `Eure Ergänzungen${notes.length ? ` (${notes.length})` : ''}`));
+    notes.forEach(n => d.appendChild(noteEl(n)));
+    if (sb) d.appendChild(tbNoteForm(key, () => renderTb(true)));
+    it.appendChild(d);
+    if (DMMODE) it.appendChild(tbEdit(e));
+    sh.appendChild(it);
+  });
+  if (DMMODE) {
+    const it = h('div', 'item'); it.appendChild(h('b', null, 'Neuer Eintrag'));
+    const nx = Math.max(-1, ...Object.values(TB).map(e => e.session ?? -1)) + 1;
+    it.appendChild(tbEdit({ id: null, session: nx, titel: '', datum: '', text: '', orte: [], kaempfe: [], quests_neu: [], quests_erledigt: [], ord: nx }));
+    sh.appendChild(it);
+  }
+  o.appendChild(sh); o.scrollTop = keep;
+}
+function tbEdit(e) {
+  const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', e.id ? 'Bearbeiten' : 'Anlegen'));
+  const fld = (ph, val, rows) => { const x = rows ? h('textarea') : h('input'); if (rows) x.rows = rows; else x.type = 'text'; x.value = val || ''; x.placeholder = ph; x.setAttribute('aria-label', ph); f.appendChild(x); return x; };
+  const se = fld('Session-Nummer', e.session ?? ''), ti = fld('Titel', e.titel), da = fld('Spieltage (z. B. 14.–16. Frühzol)', e.datum);
+  const tx = fld('Was die Gruppe erlebt hat', e.text, 6);
+  const or = fld('Orts-IDs, mit Komma (z. B. umbu, brunnen)', (e.orte || []).join(', '));
+  const ka = fld('Kämpfe, mit Komma', (e.kaempfe || []).join(', '));
+  const qn = fld('Neue Aufträge (IDs), mit Komma', (e.quests_neu || []).join(', '));
+  const qe = fld('Erledigte Aufträge (IDs), mit Komma', (e.quests_erledigt || []).join(', '));
+  const row = h('div', 'btnrow');
+  const sv = h('button', 'iconbtn', 'Speichern'); sv.type = 'button';
+  sv.onclick = () => {
+    const n = parseInt(se.value, 10);
+    const id = e.id || ('s' + (isNaN(n) ? Date.now().toString(36) : String(n).padStart(2, '0')));
+    if (!ti.value.trim()) return say('Bitte einen Titel eintragen.', 3000);
+    write(() => put('tagebuch', { id, session: isNaN(n) ? null : n, titel: ti.value.trim(), datum: da.value.trim(), text: tx.value.trim(), orte: arrIn(or.value), kaempfe: arrIn(ka.value), quests_neu: arrIn(qn.value), quests_erledigt: arrIn(qe.value), ord: isNaN(n) ? 99 : n, geaendert: new Date().toISOString() }), 'Gespeichert.').then(ok => ok && renderTb(true));
+  };
+  row.appendChild(sv);
+  if (e.id) { const rm = h('button', 'iconbtn', 'Entfernen'); rm.type = 'button'; rm.onclick = () => write(() => del_('tagebuch', e.id), 'Entfernt.').then(() => renderTb(true)); row.appendChild(rm); }
+  f.appendChild(row);
+  return f;
+}
+
+/* Ortsstatus: Punkt am Pin, Kasten im Seitenfeld */
+const _pinBase = pin;
+pin = function (n) {
+  _pinBase(n);
+  const st = known(n.id) || DMMODE ? statusOf(n.id) : null;
+  const inf = st && ostInfo(st);
+  if (!inf) return;
+  const g = L.pins.lastChild;
+  const c = el('circle', { cx: 8.5, cy: -8.5, r: 3.8, fill: inf[2], stroke: '#0b0f19', 'stroke-width': 1.3, class: 'ostdot' }, g);
+  const t = el('title', {}, c); t.textContent = inf[1];
+};
+function statusBox(id) {
+  const n = N[id];
+  if (!n || !(isPin(n) || n.type === 'ort' || n.type === 'viertel') || id === 'world' || !(known(id) || DMMODE)) return null;
+  const box = h('section', 'sec ostbox');
+  box.innerHTML = '<h4>Status</h4>';
+  const st = statusOf(id), inf = st && ostInfo(st);
+  const line = h('div', 'ostline');
+  line.innerHTML = inf ? `<span class="ostbadge" style="--c:${inf[2]}">${esc(inf[1])}</span><small>${OST[id] ? 'laut Spielleitung' : 'auf eurem Weg'}</small>` : '<span class="unknown">noch kein Status</span>';
+  box.appendChild(line);
+  const mine = OEIN.filter(x => x.ort === id).sort((a, b) => a.autor.localeCompare(b.autor, 'de'));
+  if (mine.length) {
+    const l = h('div', 'ostmine');
+    mine.forEach(x => { const i = ostInfo(x.status); if (i) l.appendChild(h('span', 'ostbadge small', `<i style="background:${i[2]}"></i>${esc(x.autor)}: ${esc(i[1])}`)); });
+    box.appendChild(l);
+  }
+  if (sb) {
+    const nm = store.get('name', '');
+    const own = nm ? OEIN.find(x => x.ort === id && x.autor.toLowerCase() === nm.toLowerCase()) : null;
+    const f = h('div', 'ostform');
+    const sel = h('select'); sel.setAttribute('aria-label', 'Deine Einschätzung');
+    sel.appendChild(Object.assign(h('option', null, 'Deine Einschätzung …'), { value: '' }));
+    OSTATI.forEach(([v, l]) => { const op = h('option', null, esc(l)); op.value = v; if (own && own.status === v) op.selected = true; sel.appendChild(op); });
+    sel.onchange = () => {
+      const name = store.get('name', '');
+      if (!name) { sel.value = ''; return say('Bitte zuerst bei einer Notiz deinen Namen eintragen.', 3500); }
+      const rid = id + '|' + slug(name);
+      if (!sel.value) return write(() => del_('ort_einschaetzung', rid), 'Einschätzung entfernt.');
+      write(() => put('ort_einschaetzung', { id: rid, ort: id, status: sel.value, autor: name.slice(0, 40), geaendert: new Date().toISOString() }), 'Einschätzung gespeichert.');
+    };
+    f.appendChild(sel);
+    if (own) { const rm = h('button', 'iconbtn', 'entfernen'); rm.type = 'button'; rm.onclick = () => write(() => del_('ort_einschaetzung', own.id), 'Einschätzung entfernt.'); f.appendChild(rm); }
+    box.appendChild(f);
+  }
+  if (DMMODE) {
+    const f = h('div', 'ostform dm');
+    const sel = h('select'); sel.setAttribute('aria-label', 'Status der Spielleitung');
+    sel.appendChild(Object.assign(h('option', null, OST[id] ? '– Status entfernen –' : '– kein Status (Spielleitung) –'), { value: '' }));
+    OSTATI.forEach(([v, l]) => { const op = h('option', null, 'Spielleitung: ' + esc(l)); op.value = v; if (OST[id] && OST[id].status === v) op.selected = true; sel.appendChild(op); });
+    sel.onchange = () => sel.value ? write(() => put('ort_status', { id, status: sel.value, geaendert: new Date().toISOString() }), 'Status gesetzt.') : write(() => del_('ort_status', id), 'Status entfernt.');
+    f.appendChild(sel); box.appendChild(f);
+  }
+  return box;
+}
+const _renderPanelBase = renderPanel;
+renderPanel = function (force) {
+  _renderPanelBase(force);
+  if (panelPending) return;
+  const id = N[S.hover] ? S.hover : N[S.sel] ? S.sel : S.focus;
+  const preview = !!S.hover && S.hover !== S.sel;
+  const box = statusBox(id); if (!box) return;
+  if (preview && !statusOf(id)) return;
+  if (preview) box.querySelectorAll('.ostform').forEach(e => e.remove());
+  const p = $('panel'), anchor = p.querySelector('.wtext') || p.querySelector('.unknown') || p.querySelector('.now') || p.querySelector('.p-path');
+  if (anchor) anchor.after(box); else p.appendChild(box);
+};
+/* Legende: Bedeutung der Statuspunkte */
+const _renderPopBase = renderPop;
+renderPop = function () {
+  _renderPopBase();
+  const pop = $('pop'); const d = h('div', 'ostleg');
+  d.innerHTML = '<h3>Status der Orte</h3>' + OSTATI.map(([, l, c]) => `<span><i style="background:${c}"></i>${esc(l)}</span>`).join('');
+  pop.appendChild(d);
+};
+
+const _renderOverlayTb = renderOverlay;
+renderOverlay = function (force) { if (ovlKind === 'tb') return renderTb(force); return _renderOverlayTb(force); };
 
 /* ── Start ── */
 rebuildTree(); buildIndex();
