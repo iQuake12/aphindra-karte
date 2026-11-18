@@ -366,6 +366,23 @@ button.tb-chip:hover { border-color: var(--ember); }
   .tabs { padding-top: 4px; padding-bottom: 4px; }
   .tab { font-size: 13px; padding: 5px 10px; }
 }
+
+/* Kompendium (18.11.2026) */
+.k-who { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.k-who select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 14px; }
+.k-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+.tb-chip.on { background: var(--ember); color: var(--ink); border-color: var(--ember); }
+.k-kat { margin-top: 14px; }
+.k-entry .q-text ul { margin: 4px 0 6px; padding-left: 18px; color: var(--text); font-size: 14px; }
+.k-entry .q-text li { margin: 2px 0; }
+.k-stufe { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.k-btn { border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; }
+.k-btn:hover { color: var(--text); }
+.k-btn.on.weiss { background: #7fd49a; color: var(--ink); border-color: #7fd49a; }
+.k-btn.on.geruecht { background: var(--warn); color: var(--ink); border-color: var(--warn); }
+.k-btn.on.unb { color: var(--text); border-color: var(--faint); }
+.k-others { font-size: 12px; color: var(--faint); margin-top: 4px; }
+.k-dm { border-top: 1px dashed rgba(242,166,90,.35); margin-top: 8px; padding-top: 6px; display: grid; gap: 4px; }
 </style>
 
 </head>
@@ -1902,6 +1919,118 @@ renderPop = function () {
 
 const _renderOverlayTb = renderOverlay;
 renderOverlay = function (force) { if (ovlKind === 'tb') return renderTb(force); return _renderOverlayTb(force); };
+
+
+/* ── Kompendium: Weltwissen, Wissensstand je SC (18.11.2026) ── */
+let KO = {}, KSC = [], koOpts = { q: '', kat: '', filt: '' };
+LOADERS.kompendium = rows => { KO = toMapById(rows); };
+LOADERS.kompendium_sc = rows => { KSC = rows; };
+['kompendium', 'kompendium_sc'].forEach(t => OPTIONAL.add(t));
+const SCS = ['Agun', 'Freddy', 'Hans', 'Lars', 'Niemand', 'Ranei', 'Tilion'];
+const KSTUF = [['weiss', 'weiß'], ['geruecht', 'Gerücht'], ['', 'unbekannt']];
+const mySc = () => store.get('sc', '');
+const kmd = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[\s(„])\*([^*\n]+?)\*(?=[\s.,;:!?)“]|$)/g, '$1<i>$2</i>')
+  .split(/\n{2,}/).map(p => { const ls = p.split('\n'); return ls.every(l => /^- /.test(l)) ? '<ul>' + ls.map(l => `<li>${l.slice(2)}</li>`).join('') + '</ul>' : `<p>${ls.join('<br>')}</p>`; }).join('');
+const kStufe = (eid, sc) => { const r = KSC.find(x => x.eintrag === eid && x.sc === sc); return r ? r.stufe : ''; };
+(function addKompTab() {
+  const b = h('button', 'tab', 'Kompendium'); b.id = 'btnKomp'; b.setAttribute('aria-pressed', 'false');
+  $('btnTb').before(b);
+  TABMAP.komp = 'btnKomp';
+  b.onclick = () => { if (ovlKind === 'komp') return closeOverlay(); closeOverlay(); ovlKind = 'komp'; renderKomp(true); };
+})();
+function setStufe(eid, stufe) {
+  const sc = mySc(); if (!sc) return say('Bitte zuerst oben deinen Charakter wählen.', 3000);
+  const id = eid + '|' + slug(sc);
+  return stufe ? write(() => put('kompendium_sc', { id, eintrag: eid, sc, stufe, geaendert: new Date().toISOString() }), 'Gespeichert.') : write(() => del_('kompendium_sc', id), 'Gespeichert.');
+}
+function renderKomp(force) {
+  if (ovlKind !== 'komp') return;
+  if (!force && panelBusy() && $('ovl')) { panelPending = true; return; }
+  let o = $('ovl'); const keep = o ? o.scrollTop : 0;
+  if (!o) { o = h('div', 'overlay'); o.id = 'ovl'; o.onclick = e => { if (e.target === o) closeOverlay(); }; $('stage').appendChild(o); }
+  o.innerHTML = '';
+  const sh = h('div', 'sheet tb komp'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Kompendium');
+  const hd = h('h2', null, '<span>Kompendium</span>'); const x = h('button', 'iconbtn', 'Schließen'); x.onclick = closeOverlay; hd.appendChild(x); sh.appendChild(hd);
+  sh.appendChild(h('p', 'cal-heute', 'Was man in Aphindra allgemein weiß. Markiert für euren Charakter, was er sicher weiß, was er nur als Gerücht kennt und was ihm neu ist.'));
+  // eigener Charakter
+  const who = h('div', 'k-who'); who.appendChild(h('label', null, 'Ich spiele'));
+  const sel = h('select'); sel.setAttribute('aria-label', 'Dein Charakter');
+  sel.appendChild(Object.assign(h('option', null, '– Charakter wählen –'), { value: '' }));
+  SCS.forEach(s => { const op = h('option', null, s); op.value = s; if (s === mySc()) op.selected = true; sel.appendChild(op); });
+  sel.onchange = () => { store.set('sc', sel.value); renderKomp(true); };
+  who.appendChild(sel); sh.appendChild(who);
+  // Suche und Filter
+  const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Kompendium suchen …'; s.value = koOpts.q; s.setAttribute('aria-label', 'Im Kompendium suchen');
+  s.oninput = () => { koOpts.q = s.value; const pos = s.selectionStart; renderKomp(true); const n = document.querySelector('.komp .tb-search'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
+  sh.appendChild(s);
+  const all = Object.values(KO).filter(k => k.freigegeben || DMMODE).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
+  const kats = [...new Set(all.map(k => k.kategorie))];
+  const fr = h('div', 'k-filter');
+  const chip = (lab, on, fn) => { const b = h('button', 'tb-chip' + (on ? ' on' : ''), esc(lab)); b.type = 'button'; b.setAttribute('aria-pressed', String(on)); b.onclick = fn; fr.appendChild(b); };
+  chip('Alle', !koOpts.kat, () => { koOpts.kat = ''; renderKomp(true); });
+  kats.forEach(k => chip(k, koOpts.kat === k, () => { koOpts.kat = koOpts.kat === k ? '' : k; renderKomp(true); }));
+  sh.appendChild(fr);
+  if (mySc()) {
+    const f2 = h('div', 'k-filter');
+    [['', 'jeder Stand'], ['weiss', 'weiß ich'], ['geruecht', 'Gerücht'], ['unbekannt', 'neu für mich']].forEach(([v, l]) => {
+      const b = h('button', 'tb-chip' + (koOpts.filt === v ? ' on' : ''), esc(l)); b.type = 'button'; b.onclick = () => { koOpts.filt = v; renderKomp(true); }; f2.appendChild(b);
+    });
+    sh.appendChild(f2);
+  }
+  const q = koOpts.q.trim().toLowerCase();
+  const list = all.filter(k => (!koOpts.kat || k.kategorie === koOpts.kat) && (!q || (k.titel + ' ' + k.text + ' ' + k.kategorie).toLowerCase().includes(q))
+    && (!koOpts.filt || !mySc() || (koOpts.filt === 'unbekannt' ? !kStufe(k.id, mySc()) : kStufe(k.id, mySc()) === koOpts.filt)));
+  if (!all.length) sh.appendChild(h('p', 'empty', DMMODE ? 'Noch keine Einträge.' : 'Die Spielleitung hat noch keine Einträge freigegeben.'));
+  else if (!list.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden.'));
+  let lastKat = null;
+  list.forEach(k => {
+    if (k.kategorie !== lastKat && !koOpts.kat) { sh.appendChild(h('div', 'cal-sub k-kat', esc(k.kategorie))); lastKat = k.kategorie; }
+    const it = h('article', 'item tb-entry k-entry');
+    const head = h('div', 'tb-head'); head.appendChild(h('b', null, esc(k.titel)));
+    if (DMMODE && !k.freigegeben) head.appendChild(h('span', 'chip', 'Entwurf'));
+    it.appendChild(head);
+    const body = h('div', 'q-text'); body.innerHTML = kmd(k.text || ''); it.appendChild(body);
+    if (mySc()) {
+      const cur = kStufe(k.id, mySc());
+      const row = h('div', 'k-stufe'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', mySc() + ' weiß das');
+      row.appendChild(h('span', 'tb-lab', esc(mySc())));
+      KSTUF.forEach(([v, l]) => { const b = h('button', 'k-btn' + (cur === v ? ' on ' + (v || 'unb') : ''), esc(l)); b.type = 'button'; b.setAttribute('aria-pressed', String(cur === v)); b.onclick = () => { if (cur !== v) setStufe(k.id, v); }; row.appendChild(b); });
+      it.appendChild(row);
+    }
+    const others = KSC.filter(r => r.eintrag === k.id && r.sc !== mySc()).sort((a, b) => a.sc.localeCompare(b.sc, 'de'));
+    if (others.length) it.appendChild(h('div', 'k-others', others.map(r => `${esc(r.sc)}: ${r.stufe === 'weiss' ? 'weiß' : 'Gerücht'}`).join(' · ')));
+    if (DMMODE) it.appendChild(kompEdit(k));
+    sh.appendChild(it);
+  });
+  if (DMMODE) { const it = h('div', 'item'); it.appendChild(h('b', null, 'Neuer Eintrag')); it.appendChild(kompEdit({ id: null, kategorie: koOpts.kat || '', titel: '', text: '', quelle: '', freigegeben: false, ord: 99 })); sh.appendChild(it); }
+  o.appendChild(sh); o.scrollTop = keep;
+}
+function kompEdit(k) {
+  const wrap = h('div', 'k-dm');
+  if (k.id) {
+    if (k.quelle) wrap.appendChild(h('div', 'state', 'Quelle im Vault: ' + esc(k.quelle)));
+    const row = h('div', 'btnrow');
+    const fb = h('button', 'iconbtn', k.freigegeben ? 'Zurückziehen' : 'Freigeben'); fb.type = 'button';
+    fb.onclick = () => write(() => put('kompendium', Object.assign({}, k, { freigegeben: !k.freigegeben, geaendert: new Date().toISOString() })), k.freigegeben ? 'Zurückgezogen.' : 'Freigegeben.').then(() => renderKomp(true));
+    row.appendChild(fb); wrap.appendChild(row);
+  }
+  const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', k.id ? 'Bearbeiten' : 'Anlegen'));
+  const fld = (ph, val, rows) => { const x = rows ? h('textarea') : h('input'); if (rows) x.rows = rows; else x.type = 'text'; x.value = val || ''; x.placeholder = ph; x.setAttribute('aria-label', ph); f.appendChild(x); return x; };
+  const ka = fld('Kategorie', k.kategorie), ti = fld('Titel', k.titel), tx = fld('Text (Absätze mit Leerzeile, Listen mit „- “)', k.text, 8), qu = fld('Quelle im Vault (nur für dich)', k.quelle), od = fld('Reihenfolge (Zahl)', String(k.ord ?? 99));
+  const row = h('div', 'btnrow');
+  const sv = h('button', 'iconbtn', 'Speichern'); sv.type = 'button';
+  sv.onclick = () => {
+    if (!ti.value.trim()) return say('Bitte einen Titel eintragen.', 3000);
+    const id = k.id || (slug(ti.value) || 'eintrag') + '-' + Date.now().toString(36).slice(-4);
+    write(() => put('kompendium', { id, kategorie: ka.value.trim() || 'Sonstiges', titel: ti.value.trim(), text: tx.value.trim(), quelle: qu.value.trim(), freigegeben: !!k.freigegeben, ord: parseInt(od.value, 10) || 99, geaendert: new Date().toISOString() }), 'Gespeichert.').then(ok => ok && renderKomp(true));
+  };
+  row.appendChild(sv);
+  if (k.id) { const rm = h('button', 'iconbtn', 'Entfernen'); rm.type = 'button'; rm.onclick = () => write(() => del_('kompendium', k.id), 'Entfernt.').then(() => renderKomp(true)); row.appendChild(rm); }
+  f.appendChild(row); wrap.appendChild(f);
+  return wrap;
+}
+const _renderOverlayKomp = renderOverlay;
+renderOverlay = function (force) { if (ovlKind === 'komp') return renderKomp(force); return _renderOverlayKomp(force); };
 
 /* ── Start ── */
 rebuildTree(); buildIndex();
