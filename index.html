@@ -436,6 +436,14 @@ button.tb-chip:hover { border-color: var(--ember); }
   .pg-aside .pg-reg, .pg-aside .pg-aside-title, .pg-aside .pg-toggle { display: none; }
 }
 
+/* Suche mit Button */
+.pg-search { display: flex; gap: 6px; align-items: stretch; margin: 2px 0 8px; }
+.pg-search .tb-search, .pg-search input { flex: 1; min-width: 0; margin: 0; }
+.pg-search .iconbtn { flex: none; }
+.pg-aside .pg-search { margin-bottom: 14px; }
+.pg-hits { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
+#ovl mark { background: color-mix(in srgb, var(--pg, var(--ember)) 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+
 /* Kompendium: Lexikon */
 @media (min-width: 900px) { .pg-chips-dup { display: none !important; } }
 #ovl[data-page="komp"] .k-entry { padding: 16px 0 14px; }
@@ -1095,6 +1103,29 @@ function openOverlay(kind) {
   (kind === 'quest' ? $('btnQuests') : $('btnNpcs')).setAttribute('aria-pressed', 'true');
   renderOverlay();
 }
+/* Suche: erst mit Enter oder „Suchen“ ausführen (19.11.2026) */
+function searchForm(inp, onGo) {
+  const f = h('form', 'pg-search'); f.setAttribute('role', 'search');
+  inp.setAttribute('enterkeyhint', 'search'); f.appendChild(inp);
+  const b = h('button', 'iconbtn', 'Suchen'); b.type = 'submit'; f.appendChild(b);
+  f.onsubmit = e => { e.preventDefault(); onGo(inp.value.trim()); };
+  inp.addEventListener('search', () => { if (!inp.value) onGo(''); });
+  return f;
+}
+function searchInfo(q, n, onReset) {
+  if (!q) return null;
+  const d = h('div', 'pg-hits', `${n === 1 ? '1 Treffer' : n + ' Treffer'} für „${esc(q)}“`);
+  const b = h('button', 'k-more', 'Suche zurücksetzen'); b.type = 'button'; b.onclick = onReset; d.appendChild(b);
+  return d;
+}
+function markHits(root, q) {
+  if (!q || !root) return;
+  const ql = q.toLowerCase(); const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('input,textarea,select,button,summary,mark,details.listedit') ? NodeFilter.FILTER_REJECT : (n.nodeValue.toLowerCase().includes(ql) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+  const nodes = []; while (w.nextNode()) nodes.push(w.currentNode);
+  nodes.forEach(n => { const t = n.nodeValue, frag = document.createDocumentFragment(); let i = 0, lo = t.toLowerCase(), j;
+    while ((j = lo.indexOf(ql, i)) >= 0) { frag.appendChild(document.createTextNode(t.slice(i, j))); const m = document.createElement('mark'); m.textContent = t.slice(j, j + q.length); frag.appendChild(m); i = j + q.length; }
+    frag.appendChild(document.createTextNode(t.slice(i))); n.replaceWith(frag); });
+}
 function renderOverlay(force) {
   if (!ovlKind) return;
   if (!force && panelBusy() && $('ovl')) { panelPending = true; return; }
@@ -1704,7 +1735,7 @@ function renderMarks(force) {
   sh.appendChild(top);
   sh.appendChild(h('p', 'cal-heute', 'Neue Markierung: Knopf drücken und auf die Karte tippen – am PC geht auch Rechtsklick. Alle können alle Markierungen bearbeiten.'));
   const ctl = h('div', 'mkctl');
-  const q = h('input'); q.type = 'text'; q.placeholder = 'Suchen …'; q.value = markListOpts.q; q.setAttribute('aria-label', 'Markierungen durchsuchen'); q.oninput = () => { markListOpts.q = q.value; renderList(); }; ctl.appendChild(q);
+  const q = h('input'); q.type = 'text'; q.placeholder = 'Suchen …'; q.value = markListOpts.q; q.setAttribute('aria-label', 'Markierungen durchsuchen'); q.type = 'search'; ctl.appendChild(searchForm(q, v => { markListOpts.q = v; renderList(); }));
   const al = h('label', 'mkrow'); const ac = h('input'); ac.type = 'checkbox'; ac.checked = markListOpts.alle; ac.onchange = () => { markListOpts.alle = ac.checked; renderList(); }; al.appendChild(ac); al.appendChild(document.createTextNode(' Alle Karten')); ctl.appendChild(al);
   const el2 = h('label', 'mkrow'); const ec = h('input'); ec.type = 'checkbox'; ec.checked = markListOpts.erledigte; ec.onchange = () => { markListOpts.erledigte = ec.checked; renderList(); }; el2.appendChild(ec); el2.appendChild(document.createTextNode(' Erledigte zeigen')); ctl.appendChild(el2);
   sh.appendChild(ctl);
@@ -1959,8 +1990,7 @@ function renderTb(force) {
   const hd = h('h2', null, '<span>Reise-Tagebuch</span>'); const x = h('button', 'iconbtn', 'Schließen'); x.onclick = closeOverlay; hd.appendChild(x); sh.appendChild(hd);
   sh.appendChild(h('p', 'cal-heute', 'Was die Gruppe erlebt hat, Session für Session: Orte, Kämpfe, Aufträge. Unter jedem Eintrag könnt ihr eigene Erinnerungen ergänzen.'));
   const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Tagebuch suchen …'; s.value = tbQ; s.setAttribute('aria-label', 'Im Tagebuch suchen');
-  s.oninput = () => { tbQ = s.value; const pos = s.selectionStart; renderTb(true); const n = sh.ownerDocument.querySelector('.tb-search'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
-  sh.appendChild(s);
+  sh.appendChild(searchForm(s, v => { tbQ = v; renderTb(true); const o2 = $('ovl'); if (o2) o2.scrollTop = 0; }));
   const q = tbQ.trim().toLowerCase();
   const list = Object.values(TB).sort((a, b) => (b.ord ?? 0) - (a.ord ?? 0));
   const hits = list.filter(e => {
@@ -1969,8 +1999,9 @@ function renderTb(force) {
     const names = [...(e.orte || []).map(i => N[i] ? N[i].name : ''), ...(e.quests_neu || []).map(i => Q[i] ? Q[i].name : i), ...(e.kaempfe || [])].join(' ');
     return [e.titel, e.datum, e.text, notes, names, 'session ' + e.session].join(' ').toLowerCase().includes(q);
   });
+  const tbInfo = searchInfo(q ? tbQ.trim() : '', hits.length, () => { tbQ = ''; renderTb(true); }); if (tbInfo) sh.appendChild(tbInfo);
   if (!list.length) sh.appendChild(h('p', 'empty', 'Noch keine Einträge.'));
-  else if (!hits.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden.'));
+  else if (!hits.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden. Versucht ein anderes Wort.'));
   hits.forEach(e => {
     const it = h('article', 'item tb-entry');
     it.innerHTML = `<div class="tb-head"><span class="chip">Session ${esc(e.session ?? '–')}</span><b>${esc(e.titel)}</b><small>${esc(e.datum)}</small></div><div class="q-text">${mdText(e.text || '')}</div>`;
@@ -1983,6 +2014,7 @@ function renderTb(force) {
     if (sb) d.appendChild(tbNoteForm(key, () => renderTb(true)));
     it.appendChild(d);
     if (DMMODE) it.appendChild(tbEdit(e));
+    if (q) markHits(it, tbQ.trim());
     sh.appendChild(it);
   });
   if (DMMODE) {
@@ -2135,8 +2167,7 @@ function renderKomp(force) {
   who.appendChild(sel); sh.appendChild(who);
   // Suche und Filter
   const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Kompendium suchen …'; s.value = koOpts.q; s.setAttribute('aria-label', 'Im Kompendium suchen');
-  s.oninput = () => { koOpts.q = s.value; const pos = s.selectionStart; renderKomp(true); const n = document.querySelector('.komp .tb-search'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
-  sh.appendChild(s);
+  sh.appendChild(searchForm(s, v => { koOpts.q = v; if (v) koOpts.kat = ''; renderKomp(true); const o2 = $('ovl'); if (o2) o2.scrollTop = 0; }));
   const all = Object.values(KO).filter(k => k.freigegeben || DMMODE).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
   const kats = [...new Set(all.map(k => k.kategorie))];
   const fr = h('div', 'k-filter');
@@ -2154,8 +2185,9 @@ function renderKomp(force) {
   const q = koOpts.q.trim().toLowerCase();
   const list = all.filter(k => (!koOpts.kat || k.kategorie === koOpts.kat) && (!q || (k.titel + ' ' + k.text + ' ' + k.kategorie).toLowerCase().includes(q))
     && (!koOpts.filt || !mySc() || (koOpts.filt === 'unbekannt' ? !kStufe(k.id, mySc()) : kStufe(k.id, mySc()) === koOpts.filt)));
+  const koInfo = searchInfo(q ? koOpts.q.trim() : '', list.length, () => { koOpts.q = ''; renderKomp(true); }); if (koInfo) sh.appendChild(koInfo);
   if (!all.length) sh.appendChild(h('p', 'empty', DMMODE ? 'Noch keine Einträge.' : 'Die Spielleitung hat noch keine Einträge freigegeben.'));
-  else if (!list.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden.'));
+  else if (!list.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden. Versucht ein anderes Wort.'));
   let lastKat = null;
   list.forEach(k => {
     if (k.kategorie !== lastKat && !koOpts.kat) { sh.appendChild(h('div', 'cal-sub k-kat', esc(k.kategorie))); lastKat = k.kategorie; }
@@ -2174,6 +2206,7 @@ function renderKomp(force) {
     const others = KSC.filter(r => r.eintrag === k.id && r.sc !== mySc()).sort((a, b) => a.sc.localeCompare(b.sc, 'de'));
     if (others.length) it.appendChild(h('div', 'k-others', others.map(r => `${esc(r.sc)}: ${r.stufe === 'weiss' ? 'weiß' : 'Gerücht'}`).join(' · ')));
     if (DMMODE) it.appendChild(kompEdit(k));
+    if (q) { it.classList.add('k-hit'); markHits(it, koOpts.q.trim()); }
     sh.appendChild(it);
   });
   if (DMMODE) { const it = h('div', 'item'); it.appendChild(h('b', null, 'Neuer Eintrag')); it.appendChild(kompEdit({ id: null, kategorie: koOpts.kat || '', titel: '', text: '', quelle: '', freigegeben: false, ord: 99 })); sh.appendChild(it); }
@@ -2241,8 +2274,9 @@ function pgKomp(sh) {
     if (!title || !body) return;
     const key = title.textContent; const long = body.children.length > 1 || it.querySelector('.k-dm');
     if (!long) return;
-    if (!KOPEN.has(key)) it.classList.add('zu');
-    const t = h('button', 'k-more', KOPEN.has(key) ? 'Einklappen' : 'Weiterlesen'); t.type = 'button'; t.setAttribute('aria-expanded', String(KOPEN.has(key)));
+    const offen = KOPEN.has(key) || it.classList.contains('k-hit');
+    if (!offen) it.classList.add('zu');
+    const t = h('button', 'k-more', offen ? 'Einklappen' : 'Weiterlesen'); t.type = 'button'; t.setAttribute('aria-expanded', String(offen));
     t.onclick = () => { const zu = it.classList.toggle('zu'); if (zu) KOPEN.delete(key); else KOPEN.add(key); t.textContent = zu ? 'Weiterlesen' : 'Einklappen'; t.setAttribute('aria-expanded', String(!zu)); };
     body.after(t);
   });
@@ -2277,7 +2311,7 @@ function pgTb(sh) {
     it.appendChild(side); it.appendChild(body);
   });
   if (!entries.length) return;
-  const search = sh.querySelector('.tb-search');
+  const search = sh.querySelector('.pg-search') || sh.querySelector('.tb-search');
   const { grid, aside, main } = pageAside(sh, 'Sessions');
   if (search) aside.appendChild(search);
   aside.appendChild(h('div', 'pg-aside-title', 'Sessions'));
@@ -2321,7 +2355,8 @@ function pgNpc(sh) {
   });
   const { grid, aside, main } = pageAside(sh, 'Orte');
   const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Person suchen …'; s.value = npQ; s.setAttribute('aria-label', 'Person suchen');
-  aside.appendChild(s);
+  const sf = searchForm(s, v => { npQ = v; filt(); });
+  aside.appendChild(sf);
   aside.appendChild(h('div', 'pg-aside-title', 'Nach Ort'));
   items[0].before(grid);
   const secs = [];
@@ -2331,8 +2366,10 @@ function pgNpc(sh) {
     const b = h('button', 'pg-reg', `<span>${esc(ort)}</span><small>${groups.get(ort).length}</small>`); b.type = 'button'; b.onclick = () => pageJump(sec); aside.appendChild(b);
   });
   let n = grid.nextElementSibling; while (n) { const nx = n.nextElementSibling; main.appendChild(n); n = nx; }
-  const filt = () => { const q = npQ.trim().toLowerCase(); secs.forEach(sec => { let vis = 0; sec.querySelectorAll('.np-card').forEach(c => { const on = !q || c.textContent.toLowerCase().includes(q); c.hidden = !on; if (on) vis++; }); sec.hidden = !vis; }); };
-  s.oninput = () => { npQ = s.value; filt(); }; filt();
+  let info = null;
+  const filt = () => { const q = npQ.trim().toLowerCase(); let tot = 0; secs.forEach(sec => { let vis = 0; sec.querySelectorAll('.np-card').forEach(c => { c.querySelectorAll('mark').forEach(m => m.replaceWith(m.textContent)); c.normalize(); const on = !q || (c.textContent + ' ' + sec.querySelector('h3').textContent).toLowerCase().includes(q); c.hidden = !on; if (on) { vis++; if (q) markHits(c, npQ.trim()); } }); sec.hidden = !vis; tot += vis; });
+    if (info) info.remove(); info = searchInfo(npQ.trim(), tot, () => { npQ = ''; s.value = ''; filt(); }); if (info) main.prepend(info); };
+  filt();
 }
 /* Markierungen: Werkzeuge links, Liste rechts */
 function pgMarks(sh) {
