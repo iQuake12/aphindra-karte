@@ -491,6 +491,11 @@ button.tb-chip:hover { border-color: var(--ember); }
 #ovl[data-page="npc"] .np-card > b { font-family: var(--f-display); font-weight: 400; font-size: 17px; }
 #ovl[data-page="npc"] .np-card > p { margin: 3px 0 6px; font-size: 14px; line-height: 1.45; }
 #ovl[data-page="npc"] .np-ort { justify-self: start; font-size: 12.5px; }
+.np-von { font-size: 12.5px; color: var(--faint); margin: 2px 0 4px; }
+#ovl[data-page="npc"] .np-add { margin-top: 26px; border: 1px dashed color-mix(in srgb, var(--pg) 55%, transparent); border-radius: 8px; padding: 14px 16px; max-width: 640px; }
+#ovl[data-page="npc"] .np-add > b { font-family: var(--f-display); font-weight: 400; font-size: 20px; color: var(--pg); }
+.np-add-hint { display: block; color: var(--muted); font-size: 13.5px; margin: 2px 0 6px; }
+#ovl[data-page="npc"] .listedit select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
 
 /* Markierungen */
 #ovl[data-page="marks"] .pg-aside .mkkats { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1116,12 +1121,39 @@ function renderOverlay(force) {
     list.forEach(p => {
       const it = h('div', 'item'); it.innerHTML = `<b>${esc(p.name)}</b><p>${esc(p.text || '')}</p>`;
       if (p.ort && N[p.ort] && (known(p.ort) || !isPin(N[p.ort]))) { const b = h('button', 'iconbtn', '↳ ' + esc(N[p.ort].name)); b.onclick = () => { closeOverlay(); go(p.ort); }; it.appendChild(b); }
+      if (p.von) it.appendChild(h('div', 'np-von', 'Eingetragen von ' + esc(p.von)));
       if (DMMODE) it.appendChild(editForm('npc', p.id, p));
+      else if (p.von && sb) it.appendChild(npcPlayerForm(p));
       sh.appendChild(it);
     });
     if (DMMODE) { const it = h('div', 'item'); it.appendChild(h('b', null, 'Neue Person')); it.appendChild(editForm('npc', null, { name: '', text: '', ort: '' })); sh.appendChild(it); }
+    else if (sb) { const it = h('div', 'item np-add'); it.appendChild(h('b', null, 'Person hinzufügen')); it.appendChild(h('span', 'np-add-hint', 'Jemand, den ihr getroffen habt und der hier noch fehlt. Alle in der Gruppe können eure Einträge sehen und ändern.')); const f = npcPlayerForm(null); f.open = true; it.appendChild(f); sh.appendChild(it); }
   }
   o.appendChild(sh); o.scrollTop = keepScroll;
+}
+function npcPlayerForm(d) {
+  const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', d ? 'Bearbeiten' : 'Neue Person'));
+  const name = h('input'); name.type = 'text'; name.maxLength = 80; name.value = d ? d.name : ''; name.placeholder = 'Name oder Beschreibung (z. B. „Die Frau mit dem Rabenhut“)'; name.setAttribute('aria-label', 'Name'); f.appendChild(name);
+  const text = h('textarea'); text.rows = 3; text.maxLength = 1500; text.value = d ? d.text || '' : ''; text.placeholder = 'Was ihr über die Person wisst'; text.setAttribute('aria-label', 'Was ihr über die Person wisst'); f.appendChild(text);
+  const ort = h('select'); ort.setAttribute('aria-label', 'Wo ihr sie getroffen habt');
+  ort.appendChild(Object.assign(h('option', null, 'Ort: keiner / unbekannt'), { value: '' }));
+  Object.entries(N).filter(([id, n]) => id !== 'world' && known(id)).sort((a, b) => a[1].name.localeCompare(b[1].name, 'de')).forEach(([id, n]) => { const op = h('option', null, esc(n.name)); op.value = id; if (d && d.ort === id) op.selected = true; ort.appendChild(op); });
+  f.appendChild(ort);
+  const von = h('input'); von.type = 'text'; von.maxLength = 40; von.value = d ? d.von : store.get('name', ''); von.placeholder = 'Dein Name'; von.setAttribute('aria-label', 'Dein Name'); f.appendChild(von);
+  const row = h('div', 'btnrow');
+  const sv = h('button', 'iconbtn', d ? 'Änderung speichern' : 'Person eintragen'); sv.type = 'button';
+  sv.onclick = () => {
+    const nm = name.value.trim(), vn = von.value.trim();
+    if (!nm) return say('Bitte einen Namen oder eine Beschreibung eintragen.', 3000);
+    if (!vn) return say('Bitte deinen Namen eintragen.', 3000);
+    store.set('name', vn);
+    const id = d ? d.id : 'sp-' + (slug(nm) || 'person').slice(0, 40) + '-' + Date.now().toString(36).slice(-4);
+    write(() => put('npc', { id, name: nm, text: text.value.trim(), ort: ort.value || null, von: vn }), d ? 'Gespeichert.' : 'Person eingetragen.').then(ok => { if (ok) renderOverlay(true); });
+  };
+  row.appendChild(sv);
+  if (d) { const rm = h('button', 'iconbtn', 'Entfernen'); rm.type = 'button'; rm.onclick = () => write(() => del('npc', d.id), 'Entfernt.').then(() => renderOverlay(true)); row.appendChild(rm); }
+  f.appendChild(row);
+  return f;
 }
 function editForm(kind, id, d) {
   const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', id ? 'Bearbeiten' : 'Anlegen'));
