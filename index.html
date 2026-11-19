@@ -539,6 +539,20 @@ button.tb-chip:hover { border-color: var(--ember); }
 .pg-cal-day { border-left: 1px solid var(--line-soft); padding-left: 28px; }
 #ovl[data-page="cal"] .cal-title { color: var(--pg); }
 @media (max-width: 899px) { .pg-cal { grid-template-columns: minmax(0, 1fr); gap: 18px; } .pg-cal-day { border-left: 0; padding-left: 0; border-top: 1px solid var(--line-soft); padding-top: 14px; } }
+
+/* Maßstab und Messen (19.11.2026) */
+.scalebar { position: absolute; right: 16px; top: 12px; justify-items: end; z-index: 4; display: grid; gap: 3px; pointer-events: none; font-size: 12px; color: var(--text); text-shadow: 0 1px 2px #000; }
+.scalebar i { display: block; height: 6px; border: 1.5px solid var(--text); border-top: 0; box-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.scalebar[hidden] { display: none; }
+.msline { fill: none; stroke: var(--ember); stroke-width: 2.5; stroke-dasharray: 7 5; }
+.msdot circle { fill: var(--ink); stroke: var(--ember); stroke-width: 2; }
+.measurebox { position: absolute; right: 14px; bottom: 14px; z-index: 5; background: var(--panel); border: 1px solid var(--ember); border-radius: 10px; padding: 10px 14px; display: grid; gap: 6px; max-width: min(340px, calc(100% - 28px)); box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.measurebox b { font-family: var(--f-display); font-weight: 400; font-size: 19px; color: var(--ember); }
+.mstimes { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 13.5px; color: var(--muted); }
+.mstimes em { font-style: normal; color: var(--text); }
+.measurebox small { color: var(--faint); font-size: 12px; }
+#btnMeasure[aria-pressed="true"] { border-color: var(--ember); color: var(--ember); }
+@media (max-width: 860px) { .measurebox { left: 10px; right: 10px; bottom: 10px; max-width: none; } }
 </style>
 
 </head>
@@ -557,6 +571,7 @@ button.tb-chip:hover { border-color: var(--ember); }
     <button class="iconbtn" id="btnNpcs" aria-pressed="false">Personen</button>
     <button class="iconbtn" id="btnMarks" aria-pressed="false">Markierungen</button>
     <button class="iconbtn" id="btnRuf" aria-pressed="false">Ruf</button>
+    <button class="iconbtn" id="btnMeasure" aria-pressed="false" title="Entfernung auf der Weltkarte messen">Messen</button>
     <button class="iconbtn" id="btnLayers" aria-pressed="false" aria-controls="pop">Legende</button>
     <button class="iconbtn dmbtn" id="btnDM" aria-pressed="false" hidden>Spielleitung</button>
   </header>
@@ -578,6 +593,7 @@ button.tb-chip:hover { border-color: var(--ember); }
       <g id="lyPins"></g>
       <g id="lyLabels"></g>
       <g id="lyMarks"></g>
+      <g id="lyMeasure"></g>
     </svg>
     <div class="mapname" id="mapname"></div>
     <div class="netstate" id="netstate" hidden></div>
@@ -2455,6 +2471,62 @@ new MutationObserver(() => {
   sh.dataset.enh = '1';
   try { enhancePage(PAGE_KIND(ovlKind) === 'marks' && ovlKind === 'mark' ? 'mark' : PAGE_KIND(ovlKind), sh); } catch (e) { console.error('Seitenaufbau', e); }
 }).observe($('stage'), { childList: true, subtree: true });
+
+
+/* ── Entfernungen: Maßstab und Messen auf der Weltkarte (19.11.2026) ── */
+const KM_PRO_EINHEIT = 2; // Weltkarte ca. 2 000 × 1 500 km
+const TEMPO = [['zu Fuß', 38, 'Tag'], ['Segelschiff', 77, 'Tag'], ['Flugwesen', 450, 'Tag'], ['Luftschiff', 80, 'Stunde']];
+let measure = null;
+const fmtKm = km => km < 10 ? km.toFixed(1).replace('.', ',') + ' km' : Math.round(km).toLocaleString('de-DE') + ' km';
+const fmtZeit = (km, v, per) => { const t = km / v; if (per === 'Stunde') return t < 1 ? Math.max(1, Math.round(t * 60)) + ' Min.' : (Math.round(t * 2) / 2).toString().replace('.', ',') + ' Std.'; if (t < 0.5) return 'unter ½ Tag'; return (Math.round(t * 2) / 2).toString().replace('.', ',') + (t > 1.25 ? ' Tage' : ' Tag'); };
+function scaleBar() {
+  let b = $('scalebar');
+  if (S.map !== 'world' || !S.view) { if (b) b.hidden = true; return; }
+  if (!b) { b = h('div', 'scalebar'); b.id = 'scalebar'; b.setAttribute('aria-hidden', 'true'); $('stage').appendChild(b); }
+  const r = svg.getBoundingClientRect(); if (!r.width) return;
+  const pxPerKm = r.width / (S.view.w * KM_PRO_EINHEIT);
+  const nice = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find(k => k * pxPerKm >= 70) || 1000;
+  b.hidden = false; b.innerHTML = `<i style="width:${Math.round(nice * pxPerKm)}px"></i><span>${nice.toLocaleString('de-DE')} km</span>`;
+}
+function measureKm() { if (!measure || measure.pts.length < 2) return 0; let s = 0; for (let i = 1; i < measure.pts.length; i++) { const [a, b] = [measure.pts[i - 1], measure.pts[i]]; s += Math.hypot(a[0] - b[0], a[1] - b[1]); } return s * KM_PRO_EINHEIT; }
+function drawMeasure() {
+  const ly = $('lyMeasure'); if (!ly) return; clear(ly);
+  if (!measure || S.map !== 'world') return;
+  if (measure.pts.length > 1) el('polyline', { points: measure.pts.map(p => p.join(',')).join(' '), class: 'msline', 'vector-effect': 'non-scaling-stroke' }, ly);
+  measure.pts.forEach(p => { const g = el('g', { 'data-scale': 1, 'data-pos': p.join(','), class: 'msdot' }, ly); el('circle', { r: 4.5 }, g); });
+  if (S.view) applyView();
+  measureBox();
+}
+function measureBox() {
+  let b = $('measurebox');
+  if (!measure) { if (b) b.remove(); return; }
+  if (!b) { b = h('div', 'measurebox'); b.id = 'measurebox'; b.setAttribute('role', 'status'); $('stage').appendChild(b); }
+  const km = measureKm();
+  b.innerHTML = '';
+  b.appendChild(h('b', null, measure.pts.length < 2 ? 'Tippe Punkte auf die Karte' : 'Strecke: ' + fmtKm(km)));
+  if (km > 0) { const t = h('div', 'mstimes'); TEMPO.forEach(([n, v, per]) => t.appendChild(h('span', null, `${esc(n)} <em>${fmtZeit(km, v, per)}</em>`))); b.appendChild(t); b.appendChild(h('small', null, 'Luftlinie. Gelände, Wetter und Umwege verlängern die Reise.')); }
+  const row = h('div', 'btnrow');
+  const u = h('button', 'iconbtn', 'Letzten Punkt entfernen'); u.type = 'button'; u.disabled = !measure.pts.length; u.onclick = () => { measure.pts.pop(); drawMeasure(); };
+  const x = h('button', 'iconbtn', 'Fertig'); x.type = 'button'; x.onclick = stopMeasure;
+  row.appendChild(u); row.appendChild(x); b.appendChild(row);
+}
+function startMeasure() {
+  if (S.map !== 'world') { say('Messen geht auf der Weltkarte. Wechsle zuerst zur Weltkarte.', 3500); return; }
+  closeOverlay(); measure = { pts: [] }; svg.classList.add('placing'); $('btnMeasure').setAttribute('aria-pressed', 'true'); drawMeasure();
+}
+function stopMeasure() { measure = null; svg.classList.remove('placing'); $('btnMeasure').setAttribute('aria-pressed', 'false'); drawMeasure(); measureBox(); }
+$('btnMeasure').onclick = () => measure ? stopMeasure() : startMeasure();
+svg.addEventListener('click', e => {
+  if (!measure || drag.moved) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  measure.pts.push(toMap(e.clientX, e.clientY).map(v => Math.round(v * 10) / 10)); drawMeasure();
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && measure) { e.stopImmediatePropagation(); stopMeasure(); } }, true);
+const _applyViewMs = applyView;
+applyView = function () { _applyViewMs(); scaleBar(); };
+const _drawMs = draw;
+draw = function () { _drawMs(); if (measure && S.map !== 'world') stopMeasure(); drawMeasure(); scaleBar(); };
+addEventListener('resize', scaleBar);
 
 /* ── Start ── */
 rebuildTree(); buildIndex();
