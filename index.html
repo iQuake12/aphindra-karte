@@ -444,6 +444,18 @@ button.tb-chip:hover { border-color: var(--ember); }
 .pg-hits { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
 #ovl mark { background: color-mix(in srgb, var(--pg, var(--ember)) 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
 
+/* Symptome */
+.sy-panel { border: 1px solid rgba(242,166,90,.45); border-radius: 8px; padding: 10px 14px; margin: 0 0 18px; background: var(--ink-2); }
+.sy-panel summary { cursor: pointer; font-family: var(--f-display); font-size: 18px; color: var(--ember); }
+.sy-panel summary small { font-family: var(--f-body); font-size: 12.5px; color: var(--faint); }
+.sy-hint { color: var(--muted); font-size: 13.5px; margin: 6px 0 10px; max-width: 70ch; }
+.sy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.sy-name { display: grid; } .sy-name small { color: var(--faint); font-size: 12.5px; }
+.sy-row.geheilt .sy-name { color: var(--ok); }
+.chip.sy-chip { border-color: rgba(242,166,90,.5); color: var(--ember); text-transform: none; letter-spacing: 0; font-family: var(--f-body); font-size: 12px; }
+.chip.sy-chip.aus { opacity: .6; border-style: dashed; }
+.sy-tbhint { border-left: 3px solid var(--ember); padding: 6px 10px; background: var(--ink-2); font-size: 14px; color: var(--muted); }
+
 /* Kompendium: Lexikon */
 @media (min-width: 900px) { .pg-chips-dup { display: none !important; } }
 #ovl[data-page="komp"] .k-entry { padding: 16px 0 14px; }
@@ -1999,6 +2011,7 @@ function renderTb(force) {
     const names = [...(e.orte || []).map(i => N[i] ? N[i].name : ''), ...(e.quests_neu || []).map(i => Q[i] ? Q[i].name : i), ...(e.kaempfe || [])].join(' ');
     return [e.titel, e.datum, e.text, notes, names, 'session ' + e.session].join(' ').toLowerCase().includes(q);
   });
+  if (DMMODE) { const fehlt = Object.values(SY).filter(sy => sy.geheilt && !Object.values(TB).some(e => (e.text || '').includes(sy.name))); if (fehlt.length) sh.appendChild(h('p', 'sy-tbhint', 'Geheilt, aber noch in keinem Eintrag erwähnt: ' + fehlt.map(sy => '<b>' + esc(sy.name) + '</b>').join(', ') + '. Bitte im passenden Eintrag festhalten.')); }
   const tbInfo = searchInfo(q ? tbQ.trim() : '', hits.length, () => { tbQ = ''; renderTb(true); }); if (tbInfo) sh.appendChild(tbInfo);
   if (!list.length) sh.appendChild(h('p', 'empty', 'Noch keine Einträge.'));
   else if (!hits.length) sh.appendChild(h('p', 'empty', 'Nichts gefunden. Versucht ein anderes Wort.'));
@@ -2131,6 +2144,35 @@ renderOverlay = function (force) { if (ovlKind === 'tb') return renderTb(force);
 let KO = {}, KSC = [], koOpts = { q: '', kat: '', filt: '' };
 LOADERS.kompendium = rows => { KO = toMapById(rows); };
 LOADERS.kompendium_sc = rows => { KSC = rows; };
+/* Symptome: Schalter aktiv/geheilt, Kompendium-Einträge vor/nach der Heilung (19.11.2026) */
+let SY = {};
+LOADERS.symptom = rows => { SY = toMapById(rows); };
+OPTIONAL.add('symptom');
+const kompSichtbar = k => { if (!k.symptom || !k.phase) return true; const sy = SY[k.symptom]; if (!sy) return true; return k.phase === 'nach' ? !!sy.geheilt : !sy.geheilt; };
+function symptomPanel() {
+  const box = h('details', 'sy-panel'); box.open = true;
+  box.appendChild(h('summary', null, 'Symptome der Welt <small>(nur für dich)</small>'));
+  box.appendChild(h('p', 'sy-hint', 'Markiere ein Symptom als geheilt, sobald die Gruppe es geheilt hat. Einträge „vor der Heilung“ verschwinden dann für die Gruppe, Einträge „nach der Heilung“ erscheinen, und der Ort bekommt den Status „geheilt“.'));
+  const list = Object.values(SY).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
+  if (!list.length) box.appendChild(h('p', 'empty', 'Noch keine Symptome angelegt.'));
+  list.forEach(sy => {
+    const row = h('div', 'sy-row' + (sy.geheilt ? ' geheilt' : ''));
+    const n = Object.values(KO).filter(k => k.symptom === sy.id).length;
+    row.appendChild(h('span', 'sy-name', `${esc(sy.name)}<small>${sy.geheilt ? 'geheilt' + (sy.geheilt_am ? ' · ' + esc(sy.geheilt_am) : '') : 'aktiv'} · ${n} abhängige Einträge</small>`));
+    const b = h('button', 'iconbtn', sy.geheilt ? 'Wieder aktiv setzen' : 'Als geheilt markieren'); b.type = 'button';
+    b.onclick = async () => {
+      const heil = !sy.geheilt;
+      const ok = await write(async () => {
+        await put('symptom', Object.assign({}, sy, { geheilt: heil, geheilt_am: heil ? (() => { try { const { jahr, tag } = heute(); return datumText(jahr, tag); } catch (e) { return null; } })() : null, geaendert: new Date().toISOString() }));
+        if (sy.ort) { if (heil) await put('ort_status', { id: sy.ort, status: 'geheilt', geaendert: new Date().toISOString() }); else if (OST[sy.ort] && OST[sy.ort].status === 'geheilt') await del_('ort_status', sy.ort); }
+      }, heil ? 'Als geheilt markiert.' : 'Wieder aktiv.');
+      if (ok !== false && heil) say(`${sy.name} ist geheilt. Denk an den Eintrag im Reise-Tagebuch.`, 6000);
+      renderKomp(true);
+    };
+    row.appendChild(b); box.appendChild(row);
+  });
+  return box;
+}
 ['kompendium', 'kompendium_sc'].forEach(t => OPTIONAL.add(t));
 const SCS = ['Agun', 'Freddy', 'Hans', 'Lars', 'Niemand', 'Ranei', 'Tilion'];
 const KSTUF = [['weiss', 'weiß'], ['geruecht', 'Gerücht'], ['', 'unbekannt']];
@@ -2168,7 +2210,8 @@ function renderKomp(force) {
   // Suche und Filter
   const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Kompendium suchen …'; s.value = koOpts.q; s.setAttribute('aria-label', 'Im Kompendium suchen');
   sh.appendChild(searchForm(s, v => { koOpts.q = v; if (v) koOpts.kat = ''; renderKomp(true); const o2 = $('ovl'); if (o2) o2.scrollTop = 0; }));
-  const all = Object.values(KO).filter(k => k.freigegeben || DMMODE).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
+  if (DMMODE) sh.appendChild(symptomPanel());
+  const all = Object.values(KO).filter(k => (k.freigegeben && kompSichtbar(k)) || DMMODE).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
   const kats = [...new Set(all.map(k => k.kategorie))];
   const fr = h('div', 'k-filter');
   const chip = (lab, on, fn) => { const b = h('button', 'tb-chip' + (on ? ' on' : ''), esc(lab)); b.type = 'button'; b.setAttribute('aria-pressed', String(on)); b.onclick = fn; fr.appendChild(b); };
@@ -2194,6 +2237,7 @@ function renderKomp(force) {
     const it = h('article', 'item tb-entry k-entry');
     const head = h('div', 'tb-head'); head.appendChild(h('b', null, esc(k.titel)));
     if (DMMODE && !k.freigegeben) head.appendChild(h('span', 'chip', 'Entwurf'));
+    if (DMMODE && k.symptom && k.phase && SY[k.symptom]) head.appendChild(h('span', 'chip sy-chip' + (kompSichtbar(k) ? '' : ' aus'), `${k.phase === 'nach' ? 'nach' : 'vor'} Heilung: ${esc(SY[k.symptom].name)}${kompSichtbar(k) ? '' : ' · derzeit verborgen'}`));
     it.appendChild(head);
     const body = h('div', 'q-text'); body.innerHTML = kmd(k.text || ''); it.appendChild(body);
     if (mySc()) {
@@ -2224,12 +2268,16 @@ function kompEdit(k) {
   const f = h('details', 'listedit'); f.appendChild(h('summary', 'state', k.id ? 'Bearbeiten' : 'Anlegen'));
   const fld = (ph, val, rows) => { const x = rows ? h('textarea') : h('input'); if (rows) x.rows = rows; else x.type = 'text'; x.value = val || ''; x.placeholder = ph; x.setAttribute('aria-label', ph); f.appendChild(x); return x; };
   const ka = fld('Kategorie', k.kategorie), ti = fld('Titel', k.titel), tx = fld('Text (Absätze mit Leerzeile, Listen mit „- “)', k.text, 8), qu = fld('Quelle im Vault (nur für dich)', k.quelle), od = fld('Reihenfolge (Zahl)', String(k.ord ?? 99));
+  const syS = h('select'); syS.setAttribute('aria-label', 'Hängt ab von Symptom'); syS.appendChild(Object.assign(h('option', null, 'Hängt von keinem Symptom ab'), { value: '' }));
+  Object.values(SY).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).forEach(sy => { const op = h('option', null, 'Symptom: ' + esc(sy.name)); op.value = sy.id; if (k.symptom === sy.id) op.selected = true; syS.appendChild(op); });
+  const phS = h('select'); phS.setAttribute('aria-label', 'Sichtbar'); [['', 'immer sichtbar'], ['vor', 'nur solange das Symptom aktiv ist'], ['nach', 'erst nach der Heilung']].forEach(([v, l]) => { const op = h('option', null, l); op.value = v; if ((k.phase || '') === v) op.selected = true; phS.appendChild(op); });
+  f.appendChild(syS); f.appendChild(phS);
   const row = h('div', 'btnrow');
   const sv = h('button', 'iconbtn', 'Speichern'); sv.type = 'button';
   sv.onclick = () => {
     if (!ti.value.trim()) return say('Bitte einen Titel eintragen.', 3000);
     const id = k.id || (slug(ti.value) || 'eintrag') + '-' + Date.now().toString(36).slice(-4);
-    write(() => put('kompendium', { id, kategorie: ka.value.trim() || 'Sonstiges', titel: ti.value.trim(), text: tx.value.trim(), quelle: qu.value.trim(), freigegeben: !!k.freigegeben, ord: parseInt(od.value, 10) || 99, geaendert: new Date().toISOString() }), 'Gespeichert.').then(ok => ok && renderKomp(true));
+    write(() => put('kompendium', { id, kategorie: ka.value.trim() || 'Sonstiges', titel: ti.value.trim(), text: tx.value.trim(), quelle: qu.value.trim(), freigegeben: !!k.freigegeben, ord: parseInt(od.value, 10) || 99, symptom: syS.value || null, phase: syS.value && phS.value ? phS.value : null, geaendert: new Date().toISOString() }), 'Gespeichert.').then(ok => ok && renderKomp(true));
   };
   row.appendChild(sv);
   if (k.id) { const rm = h('button', 'iconbtn', 'Entfernen'); rm.type = 'button'; rm.onclick = () => write(() => del_('kompendium', k.id), 'Entfernt.').then(() => renderKomp(true)); row.appendChild(rm); }
