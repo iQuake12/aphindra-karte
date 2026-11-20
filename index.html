@@ -559,6 +559,7 @@ button.tb-chip:hover { border-color: var(--ember); }
 .mstimes tbody th { font-weight: 400; color: var(--text); white-space: nowrap; }
 .mstimes td:nth-child(2) { color: var(--text); white-space: nowrap; }
 .measurebox small { color: var(--faint); font-size: 12px; }
+.ms-dm { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 #btnMeasure[aria-pressed="true"] { border-color: var(--ember); color: var(--ember); }
 @media (max-width: 860px) { .measurebox { left: 10px; right: 10px; bottom: 10px; max-width: none; } }
 </style>
@@ -2499,7 +2500,7 @@ const KOSTEN = {
   'zu Fuß': km => { const t = Math.max(1, Math.ceil(km / 38)); return `${fmtGeld(t * 0.5)}–${fmtGeld(t)} pro Person (Verpflegung, Unterkunft)`; },
   'Segelschiff': km => `ca. ${fmtGeld(km / 15)} pro Person (Überfahrt, 1 SM je 1,5 km)`,
   'Flugwesen': () => 'nicht käuflich, nur mit dem Vertrauen einer Ethnie',
-  'Luftschiff': () => 'nicht buchbar, es gibt nur ein Versuchsschiff'
+  'Luftschiff': () => 'Preis noch offen'
 };
 let measure = null;
 const fmtKm = km => km < 10 ? km.toFixed(1).replace('.', ',') + ' km' : Math.round(km).toLocaleString('de-DE') + ' km';
@@ -2531,8 +2532,13 @@ function measureBox() {
   b.appendChild(h('b', null, measure.pts.length < 2 ? 'Tippe Punkte auf die Karte' : 'Strecke: ' + fmtKm(km)));
   if (km > 0) {
     const t = h('table', 'mstimes'); t.innerHTML = '<thead><tr><th scope="col">Reise</th><th scope="col">Dauer</th><th scope="col">Kosten, grob</th></tr></thead>';
-    const tb = h('tbody'); TEMPO.forEach(([n, v, per]) => { const r = h('tr'); r.innerHTML = `<th scope="row">${esc(n)}</th><td>${fmtZeit(km, v, per)}</td><td>${esc(KOSTEN[n](km))}</td>`; tb.appendChild(r); }); t.appendChild(tb); b.appendChild(t);
+    const tb = h('tbody'); TEMPO.filter(([n]) => n !== 'Luftschiff' || (G && G.luftschiffe)).forEach(([n, v, per]) => { const r = h('tr'); r.innerHTML = `<th scope="row">${esc(n)}</th><td>${fmtZeit(km, v, per)}</td><td>${esc(KOSTEN[n](km))}</td>`; tb.appendChild(r); }); t.appendChild(tb); b.appendChild(t);
     b.appendChild(h('small', null, 'Luftlinie. Gelände, Wetter und Umwege verlängern die Reise. Kosten nach Spielerhandbuch, ohne Zölle und Reittiere.'));
+  }
+  if (DMMODE) {
+    const lab = h('label', 'ms-dm'); const cb = h('input'); cb.type = 'checkbox'; cb.checked = !!(G && G.luftschiffe);
+    cb.onchange = () => write(() => put('gruppe', { id: 'stand', luftschiffe: cb.checked }), cb.checked ? 'Luftschiffe werden beim Messen angezeigt.' : 'Luftschiffe ausgeblendet.').then(() => measureBox());
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' Luftschiffe beim Messen anzeigen (für alle, nur du siehst diesen Schalter)')); b.appendChild(lab);
   }
   const row = h('div', 'btnrow');
   const u = h('button', 'iconbtn', 'Letzten Punkt entfernen'); u.type = 'button'; u.disabled = !measure.pts.length; u.onclick = () => { measure.pts.pop(); drawMeasure(); };
