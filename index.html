@@ -2245,8 +2245,14 @@ function renderKomp(force) {
   sh.appendChild(fr);
   if (mySc()) {
     const f2 = h('div', 'k-filter');
-    [['', 'jeder Stand'], ['weiss', 'weiß ich'], ['geruecht', 'Gerücht'], ['unbekannt', 'neu für mich']].forEach(([v, l]) => {
-      const b = h('button', 'tb-chip' + (koOpts.filt === v ? ' on' : ''), esc(l)); b.type = 'button'; b.onclick = () => { koOpts.filt = v; renderKomp(true); }; f2.appendChild(b);
+    f2.setAttribute('role', 'group'); f2.setAttribute('aria-label', 'Nach Wissensstand filtern');
+    f2.appendChild(h('span', 'tb-lab', 'Zeigen:'));
+    const cnt = v => all.filter(k => v === 'unbekannt' ? !kStufe(k.id, mySc()) : kStufe(k.id, mySc()) === v).length;
+    [['weiss', 'Bekannt'], ['geruecht', 'Gerücht'], ['unbekannt', 'Unbekannt']].forEach(([v, l]) => {
+      const on = koOpts.filt === v;
+      const b = h('button', 'tb-chip' + (on ? ' on' : ''), `${esc(l)} <small>${cnt(v)}</small>`); b.type = 'button'; b.setAttribute('aria-pressed', String(on));
+      b.title = on ? 'Filter aufheben' : 'Nur „' + l + '“ zeigen';
+      b.onclick = () => { koOpts.filt = on ? '' : v; renderKomp(true); }; f2.appendChild(b);
     });
     sh.appendChild(f2);
   }
