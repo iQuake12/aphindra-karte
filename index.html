@@ -446,7 +446,12 @@ button.tb-chip:hover { border-color: var(--ember); }
 
 /* Symptome */
 .sy-panel { border: 1px solid rgba(242,166,90,.45); border-radius: 8px; padding: 10px 14px; margin: 0 0 18px; background: var(--ink-2); }
-.sy-panel summary { cursor: pointer; font-family: var(--f-display); font-size: 18px; color: var(--ember); }
+.sy-panel summary { cursor: default; list-style: none; font-family: var(--f-display); font-size: 18px; color: var(--ember); display: flex; align-items: baseline; gap: 8px; }
+.sy-panel summary::-webkit-details-marker { display: none; }
+.sy-arrow { cursor: pointer; display: inline-grid; place-items: center; width: 26px; height: 26px; border: 1px solid rgba(242,166,90,.5); border-radius: 50%; font-size: 13px; transition: transform .15s; }
+.sy-arrow:hover { background: rgba(242,166,90,.15); }
+.sy-panel[open] .sy-arrow { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .sy-arrow { transition: none; } }
 .sy-panel summary small { font-family: var(--f-body); font-size: 12.5px; color: var(--faint); }
 .sy-hint { color: var(--muted); font-size: 13.5px; margin: 6px 0 10px; max-width: 70ch; }
 .sy-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
@@ -2168,7 +2173,10 @@ const kompSichtbar = k => { if (!k.symptom || !k.phase) return true; const sy = 
 function symptomPanel() {
   const box = h('details', 'sy-panel'); box.open = syOffen;
   box.addEventListener('toggle', () => { syOffen = box.open; });
-  box.appendChild(h('summary', null, 'Symptome der Welt <small>(nur für dich)</small>'));
+  const sum = h('summary', null, '<span class="sy-arrow" aria-hidden="true">▸</span> Symptome der Welt <small>(nur für dich)</small>');
+  sum.setAttribute('aria-label', 'Symptome der Welt auf- oder zuklappen');
+  sum.addEventListener('click', e => { if (e.detail !== 0 && !e.target.closest('.sy-arrow')) e.preventDefault(); });
+  box.appendChild(sum);
   box.appendChild(h('p', 'sy-hint', 'Markiere ein Symptom als geheilt, sobald die Gruppe es geheilt hat. Einträge „vor der Heilung“ verschwinden dann für die Gruppe, Einträge „nach der Heilung“ erscheinen, und der Ort bekommt den Status „geheilt“.'));
   const list = Object.values(SY).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
   if (!list.length) box.appendChild(h('p', 'empty', 'Noch keine Symptome angelegt.'));
