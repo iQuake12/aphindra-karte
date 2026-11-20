@@ -2161,12 +2161,13 @@ let KO = {}, KSC = [], koOpts = { q: '', kat: '', filt: '' };
 LOADERS.kompendium = rows => { KO = toMapById(rows); };
 LOADERS.kompendium_sc = rows => { KSC = rows; };
 /* Symptome: Schalter aktiv/geheilt, Kompendium-Einträge vor/nach der Heilung (19.11.2026) */
-let SY = {};
+let SY = {}, syOffen = false;
 LOADERS.symptom = rows => { SY = toMapById(rows); };
 OPTIONAL.add('symptom');
 const kompSichtbar = k => { if (!k.symptom || !k.phase) return true; const sy = SY[k.symptom]; if (!sy) return true; return k.phase === 'nach' ? !!sy.geheilt : !sy.geheilt; };
 function symptomPanel() {
-  const box = h('details', 'sy-panel'); box.open = true;
+  const box = h('details', 'sy-panel'); box.open = syOffen;
+  box.addEventListener('toggle', () => { syOffen = box.open; });
   box.appendChild(h('summary', null, 'Symptome der Welt <small>(nur für dich)</small>'));
   box.appendChild(h('p', 'sy-hint', 'Markiere ein Symptom als geheilt, sobald die Gruppe es geheilt hat. Einträge „vor der Heilung“ verschwinden dann für die Gruppe, Einträge „nach der Heilung“ erscheinen, und der Ort bekommt den Status „geheilt“.'));
   const list = Object.values(SY).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
