@@ -2200,7 +2200,7 @@ function symptomPanel() {
 }
 ['kompendium', 'kompendium_sc'].forEach(t => OPTIONAL.add(t));
 const SCS = ['Agun', 'Freddy', 'Hans', 'Lars', 'Niemand', 'Ranei', 'Tilion'];
-const KSTUF = [['weiss', 'weiß'], ['geruecht', 'Gerücht'], ['', 'unbekannt']];
+const KSTUF = [['weiss', 'bekannt'], ['geruecht', 'Gerücht'], ['', 'unbekannt']];
 const mySc = () => store.get('sc', '');
 const kmd = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[\s(„])\*([^*\n]+?)\*(?=[\s.,;:!?)“]|$)/g, '$1<i>$2</i>')
   .split(/\n{2,}/).map(p => { const ls = p.split('\n'); return ls.every(l => /^- /.test(l)) ? '<ul>' + ls.map(l => `<li>${l.slice(2)}</li>`).join('') + '</ul>' : `<p>${ls.join('<br>')}</p>`; }).join('');
@@ -2273,13 +2273,13 @@ function renderKomp(force) {
     const body = h('div', 'q-text'); body.innerHTML = kmd(k.text || ''); it.appendChild(body);
     if (mySc()) {
       const cur = kStufe(k.id, mySc());
-      const row = h('div', 'k-stufe'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', mySc() + ' weiß das');
+      const row = h('div', 'k-stufe'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Wissensstand von ' + mySc());
       row.appendChild(h('span', 'tb-lab', esc(mySc())));
       KSTUF.forEach(([v, l]) => { const b = h('button', 'k-btn' + (cur === v ? ' on ' + (v || 'unb') : ''), esc(l)); b.type = 'button'; b.setAttribute('aria-pressed', String(cur === v)); b.onclick = () => { if (cur !== v) setStufe(k.id, v); }; row.appendChild(b); });
       it.appendChild(row);
     }
     const others = KSC.filter(r => r.eintrag === k.id && r.sc !== mySc()).sort((a, b) => a.sc.localeCompare(b.sc, 'de'));
-    if (others.length) it.appendChild(h('div', 'k-others', others.map(r => `${esc(r.sc)}: ${r.stufe === 'weiss' ? 'weiß' : 'Gerücht'}`).join(' · ')));
+    if (others.length) it.appendChild(h('div', 'k-others', others.map(r => `${esc(r.sc)}: ${r.stufe === 'weiss' ? 'bekannt' : 'Gerücht'}`).join(' · ')));
     if (DMMODE) it.appendChild(kompEdit(k));
     if (q) { it.classList.add('k-hit'); markHits(it, koOpts.q.trim()); }
     sh.appendChild(it);
