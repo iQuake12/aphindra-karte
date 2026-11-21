@@ -562,6 +562,11 @@ button.tb-chip:hover { border-color: var(--ember); }
 .ms-dm { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 #btnMeasure[aria-pressed="true"] { border-color: var(--ember); color: var(--ember); }
 @media (max-width: 860px) { .measurebox { left: 10px; right: 10px; bottom: 10px; max-width: none; } }
+.k-tab { overflow-x: auto; margin: 6px 0 12px; }
+.k-tab table { border-collapse: collapse; font-size: 13.5px; line-height: 1.4; min-width: 100%; }
+.k-tab th, .k-tab td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+.k-tab th { color: var(--pg, var(--text)); font-weight: 600; border-bottom-color: var(--line); white-space: nowrap; }
+.k-tab td:first-child { color: var(--text); font-weight: 600; }
 </style>
 
 </head>
@@ -2207,7 +2212,18 @@ const SCS = ['Agun', 'Freddy', 'Hans', 'Lars', 'Niemand', 'Ranei', 'Tilion'];
 const KSTUF = [['weiss', 'bekannt'], ['geruecht', 'Gerücht'], ['', 'unbekannt']];
 const mySc = () => store.get('sc', '');
 const kmd = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[\s(„])\*([^*\n]+?)\*(?=[\s.,;:!?)“]|$)/g, '$1<i>$2</i>')
-  .split(/\n{2,}/).map(p => { const ls = p.split('\n'); return ls.every(l => /^- /.test(l)) ? '<ul>' + ls.map(l => `<li>${l.slice(2)}</li>`).join('') + '</ul>' : `<p>${ls.join('<br>')}</p>`; }).join('');
+  .split(/\n{2,}/).map(p => {
+    // Absatz in Gruppen teilen: Listenzeilen (- ), Tabellenzeilen (|) und Text (21.11.2026)
+    const out = []; let cur = null;
+    p.split('\n').forEach(l => { const t = /^- /.test(l) ? 'ul' : /^\|.*\|\s*$/.test(l) ? 'tb' : 'p'; if (!cur || cur.t !== t) { cur = { t, ls: [] }; out.push(cur); } cur.ls.push(l); });
+    return out.map(g => {
+      if (g.t === 'ul') return '<ul>' + g.ls.map(l => `<li>${l.slice(2)}</li>`).join('') + '</ul>';
+      if (g.t === 'p') return `<p>${g.ls.join('<br>')}</p>`;
+      const rows = g.ls.filter(l => !/^\|[\s:|-]+\|\s*$/.test(l)).map(l => l.trim().slice(1, -1).split('|').map(c => c.trim()));
+      const [hd, ...bd] = rows;
+      return '<div class="k-tab"><table><thead><tr>' + hd.map(c => `<th scope="col">${c}</th>`).join('') + '</tr></thead><tbody>' + bd.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table></div>';
+    }).join('');
+  }).join('');
 const kStufe = (eid, sc) => { const r = KSC.find(x => x.eintrag === eid && x.sc === sc); return r ? r.stufe : ''; };
 (function addKompTab() {
   const b = h('button', 'tab', 'Kompendium'); b.id = 'btnKomp'; b.setAttribute('aria-pressed', 'false');
@@ -2240,7 +2256,10 @@ function renderKomp(force) {
   const s = h('input'); s.type = 'search'; s.className = 'tb-search'; s.placeholder = 'Im Kompendium suchen …'; s.value = koOpts.q; s.setAttribute('aria-label', 'Im Kompendium suchen');
   sh.appendChild(searchForm(s, v => { koOpts.q = v; if (v) koOpts.kat = ''; renderKomp(true); const o2 = $('ovl'); if (o2) o2.scrollTop = 0; }));
   if (DMMODE) sh.appendChild(symptomPanel());
-  const all = Object.values(KO).filter(k => (k.freigegeben && kompSichtbar(k)) || DMMODE).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
+  const all0 = Object.values(KO).filter(k => (k.freigegeben && kompSichtbar(k)) || DMMODE);
+  // Kategorien zusammenhalten: zuerst nach der kleinsten Reihenfolge der Kategorie, dann Eintrag, dann Titel (21.11.2026)
+  const katMin = {}; all0.forEach(k => { const o = k.ord ?? 99; if (!(k.kategorie in katMin) || o < katMin[k.kategorie]) katMin[k.kategorie] = o; });
+  const all = all0.sort((a, b) => (katMin[a.kategorie] - katMin[b.kategorie]) || String(a.kategorie).localeCompare(String(b.kategorie), 'de') || ((a.ord ?? 99) - (b.ord ?? 99)) || String(a.titel).localeCompare(String(b.titel), 'de'));
   const kats = [...new Set(all.map(k => k.kategorie))];
   const fr = h('div', 'k-filter');
   const chip = (lab, on, fn) => { const b = h('button', 'tb-chip' + (on ? ' on' : ''), esc(lab)); b.type = 'button'; b.setAttribute('aria-pressed', String(on)); b.onclick = fn; fr.appendChild(b); };
