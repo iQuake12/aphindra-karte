@@ -588,6 +588,39 @@ button.tb-chip:hover { border-color: var(--ember); }
 .ozbox summary { cursor: pointer; font-size: 13px; }
 .ozbox select, .ozbox textarea { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
 .ozbox select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; }
+
+/* Handy: kompakte Kopfzeile, Infobereich als ziehbare Leiste, Querformat nebeneinander (21.11.2026) */
+.sheethandle { display: none; }
+@media (max-width: 860px) {
+  .app, .app.view-page { grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+  .bar { gap: 6px; padding-block: 6px; }
+  .brand { font-size: 17px; }
+  .search { flex: 1 1 120px; width: auto; min-width: 0; }
+  .bar .iconbtn { padding: 4px 9px; font-size: 12.5px; }
+  .crumbs { order: 5; flex: 1 1 120px; flex-basis: 120px; }
+  .crumb { font-size: 13px; padding: 2px 5px; }
+  .sheethandle { display: flex; grid-column: 1 / -1; justify-content: center; align-items: center; height: 22px; width: 100%; padding: 0; border: 0; border-top: 1px solid var(--line); background: var(--panel); touch-action: none; cursor: grab; }
+  .sheethandle::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--faint); }
+  .panel { height: var(--sheet-h, 34svh); border-top: 0; transition: height .18s ease; }
+  .app.sheet-drag .panel { transition: none; }
+  .app.sheet-min .panel { height: 0; padding-block: 0; overflow: hidden; }
+  .app.view-page .sheethandle { display: none; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  :root { --panel-w: min(42vw, 360px); }
+  .app, .app.view-page { grid-template-columns: minmax(0, 1fr) var(--panel-w); grid-template-rows: auto auto minmax(0, 1fr); }
+  .bar { flex-wrap: nowrap; padding-block: 4px; gap: 6px; }
+  .brand { display: none; }
+  .crumbs { order: 0; flex: 1 1 auto; flex-basis: auto; }
+  .search { flex: 0 1 170px; width: auto; min-width: 0; }
+  .bar .iconbtn { padding: 3px 8px; font-size: 12px; }
+  .tabs { padding-top: 2px; padding-bottom: 2px; }
+  .tab { font-size: 12.5px; padding: 3px 9px; }
+  .stage { grid-row: 3; grid-column: 1; }
+  .panel { grid-row: 3; grid-column: 2; height: auto; border-top: 0; border-left: 1px solid var(--line-soft); padding-top: 10px; }
+  .app.view-page .stage { grid-column: 1 / -1; }
+  .sheethandle { display: none; }
+}
 </style>
 
 </head>
@@ -641,6 +674,7 @@ button.tb-chip:hover { border-color: var(--ember); }
     </div>
   </main>
 
+  <button class="sheethandle" id="sheetHandle" type="button" aria-label="Infobereich größer oder kleiner ziehen"></button>
   <aside class="panel" id="panel" aria-live="polite"></aside>
 </div>
 
@@ -982,6 +1016,7 @@ function go(id, opts = {}) {
   const fit = bboxOf(focus);
   if (mapChanged) { setView({ x: 0, y: 0, w: 1000, h: 1000 * A }); setView(fit, false); } else setView(fit, !opts.instant);
   renderPanel();
+  if (S.sel && window.openSheet) openSheet();
   hashSet(S.sel || focus);
 }
 function up() {
@@ -2809,6 +2844,33 @@ function ozBox(id) {
   row.appendChild(sv); d.appendChild(row);
   return d;
 }
+
+
+/* ── Handy: Infobereich ziehen oder antippen ── */
+(function sheet() {
+  const app = $('app'), hd = $('sheetHandle'), pn = $('panel');
+  if (!hd) return;
+  const vh = () => window.innerHeight;
+  const relayout = () => requestAnimationFrame(() => dispatchEvent(new Event('resize')));
+  const setH = px => { if (px === null) app.style.removeProperty('--sheet-h'); else app.style.setProperty('--sheet-h', Math.round(px) + 'px'); };
+  let y0 = 0, h0 = 0, moved = false, id = null;
+  hd.addEventListener('pointerdown', e => { id = e.pointerId; hd.setPointerCapture(id); y0 = e.clientY; h0 = app.classList.contains('sheet-min') ? 0 : pn.getBoundingClientRect().height; moved = false; app.classList.add('sheet-drag'); });
+  hd.addEventListener('pointermove', e => {
+    if (id !== e.pointerId) return;
+    const dy = y0 - e.clientY; if (Math.abs(dy) > 6) moved = true; if (!moved) return;
+    app.classList.remove('sheet-min'); setH(Math.max(0, Math.min(vh() * .75, h0 + dy)));
+  });
+  const end = e => {
+    if (id !== e.pointerId) return; id = null; app.classList.remove('sheet-drag');
+    if (!moved) { app.classList.toggle('sheet-min'); relayout(); return; }
+    const h = pn.getBoundingClientRect().height;
+    if (h < vh() * .12) { app.classList.add('sheet-min'); setH(null); }
+    relayout();
+  };
+  hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', end);
+  hd.addEventListener('keydown', e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); const cur = app.classList.contains('sheet-min') ? 0 : pn.getBoundingClientRect().height; if (e.key === 'ArrowDown' && cur < vh() * .2) { app.classList.add('sheet-min'); } else { app.classList.remove('sheet-min'); setH(Math.max(vh() * .15, Math.min(vh() * .75, cur + (e.key === 'ArrowUp' ? 1 : -1) * vh() * .15))); } relayout(); } });
+  window.openSheet = () => { if (app.classList.contains('sheet-min')) { app.classList.remove('sheet-min'); relayout(); } };
+})();
 
 /* ── Start ── */
 rebuildTree(); buildIndex();
