@@ -567,6 +567,20 @@ button.tb-chip:hover { border-color: var(--ember); }
 .k-tab th, .k-tab td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
 .k-tab th { color: var(--pg, var(--text)); font-weight: 600; border-bottom-color: var(--line); white-space: nowrap; }
 .k-tab td:first-child { color: var(--text); font-weight: 600; }
+/* Markierungen: kompakte Vorschau beim Darüberfahren (21.11.2026) */
+.mktip { position: absolute; z-index: 30; max-width: 280px; pointer-events: none; background: rgba(15,21,34,.96); border: 1px solid var(--line); border-left: 3px solid var(--c, var(--ember)); border-radius: 8px; padding: 8px 11px; box-shadow: 0 6px 22px rgba(0,0,0,.45); font-size: 13px; line-height: 1.45; color: var(--muted); }
+.mktip[hidden] { display: none; }
+.mktip b { display: block; color: var(--text); font-size: 14px; margin-bottom: 2px; }
+.mktip .mkt-kat { font-size: 11.5px; color: var(--faint); margin-bottom: 4px; }
+.mktip .mkt-tx { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.qnotes { margin-top: 8px; border-top: 1px dashed var(--line-soft); padding-top: 6px; font-size: 13.5px; }
+.qnotes > summary { cursor: pointer; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; }
+.qnotes > summary::-webkit-details-marker { display: none; }
+.qnotes > summary::before { content: '▸'; font-size: 11px; transition: transform .15s; }
+.qnotes[open] > summary::before { transform: rotate(90deg); }
+.qnotes > summary:hover, .qnotes > summary:focus-visible { color: var(--text); }
+.qn-n { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--text); }
+.qnotes .note { margin: 6px 0; }
 </style>
 
 </head>
@@ -1188,7 +1202,7 @@ function renderOverlay(force) {
     }
     const list = qList();
     if (!list.length) sh.appendChild(h('p', 'empty', 'Noch keine Aufträge eingetragen.'));
-    list.forEach(q => { const it = h('div', 'item'); it.appendChild(questCard(q)); if (DMMODE) it.appendChild(editForm('quest', q.id, q)); sh.appendChild(it); });
+    list.forEach(q => { const it = h('div', 'item'); it.appendChild(questCard(q)); it.appendChild(questNotes(q)); if (DMMODE) it.appendChild(editForm('quest', q.id, q)); sh.appendChild(it); });
     if (DMMODE) { const it = h('div', 'item'); it.appendChild(h('b', null, 'Neuer Auftrag')); it.appendChild(editForm('quest', null, { name: '', text: '', orte: [], status: 'offen', ord: list.length + 1 })); sh.appendChild(it); }
   } else {
     const list = Object.entries(NP).map(([id, p]) => Object.assign({ id }, p)).sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -1665,7 +1679,7 @@ function drawMarks() {
   if (on.marks === false) return;
   MARKS.filter(m => m.karte === S.map && markVisible(m)).forEach(m => {
     const k = mkat(m.kategorie), done = k.quest && m.status !== 'offen';
-    const g = el('g', { class: 'mark' + (done ? ' done' : '') + (markEdit && markEdit.id === m.id ? ' sel' : ''), 'data-scale': 1, 'data-pos': `${m.x},${m.y}`, tabindex: 0, role: 'button', 'aria-label': k.name + ': ' + (m.name || 'ohne Namen') }, ly);
+    const g = el('g', { class: 'mark' + (done ? ' done' : '') + (markEdit && markEdit.id === m.id ? ' sel' : ''), 'data-mk': m.id, 'data-scale': 1, 'data-pos': `${m.x},${m.y}`, tabindex: 0, role: 'button', 'aria-label': k.name + ': ' + (m.name || 'ohne Namen') }, ly);
     el('circle', { r: 13, class: 'hit' }, g);
     el('circle', { r: 8.5, class: 'mk', fill: k.c }, g);
     const t = el('text', { x: 0, y: 0.5, 'text-anchor': 'middle', 'dominant-baseline': 'middle', class: 'mkg' }, g); t.textContent = k.g;
@@ -2703,6 +2717,62 @@ function layoutLabels() {
   });
 }
 addEventListener('resize', scheduleLabels);
+
+/* ── Markierungen: Vorschau beim Darüberfahren oder bei Tastaturfokus (21.11.2026) ── */
+(function markTips() {
+  const tip = h('div', 'mktip'); tip.hidden = true; tip.setAttribute('role', 'tooltip'); tip.id = 'mktip';
+  const host = svg.parentNode; if (getComputedStyle(host).position === 'static') host.style.position = 'relative'; host.appendChild(tip);
+  let cur = null;
+  const show = g => {
+    const m = MARKS.find(x => x.id === g.dataset.mk); if (!m) return;
+    const k = mkat(m.kategorie), bits = [k.name];
+    if (k.quest && m.status) bits.push(m.status);
+    if (m.fuer) bits.push('für ' + m.fuer);
+    const d = markDate(m); if (d) bits.push(d);
+    tip.style.setProperty('--c', k.c);
+    tip.innerHTML = `<b>${esc(m.name || 'ohne Namen')}</b><div class="mkt-kat">${esc(bits.join(' · '))}</div>` + (m.text ? `<div class="mkt-tx">${esc(m.text.length > 400 ? m.text.slice(0, 400) + ' …' : m.text)}</div>` : '<div class="mkt-tx"><i>noch keine Beschreibung</i></div>');
+    tip.hidden = false; cur = g; place();
+  };
+  const place = () => {
+    if (!cur || tip.hidden) return;
+    const r = cur.getBoundingClientRect(), hb = host.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    let x = r.right - hb.left + 8, y = r.top - hb.top - 4;
+    if (x + tw > hb.width - 8) x = r.left - hb.left - tw - 8;
+    if (y + th > hb.height - 8) y = hb.height - th - 8;
+    tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+  };
+  const hide = () => { tip.hidden = true; cur = null; };
+  svg.addEventListener('pointerover', e => { if (e.pointerType === 'touch') return; const g = e.target.closest && e.target.closest('g.mark'); if (g && g !== cur) show(g); });
+  svg.addEventListener('pointerout', e => { const g = e.target.closest && e.target.closest('g.mark'); if (g && !(e.relatedTarget && g.contains(e.relatedTarget))) hide(); });
+  svg.addEventListener('focusin', e => { const g = e.target.closest && e.target.closest('g.mark'); if (g) show(g); });
+  svg.addEventListener('focusout', hide);
+  svg.addEventListener('pointerdown', hide);
+  svg.addEventListener('wheel', hide, { passive: true });
+})();
+
+/* ── Notizen zu Aufträgen (21.11.2026): gespeichert in „notiz“ mit ort = 'q:' + Auftrag ── */
+const QNOPEN = new Set();
+function questNotes(q) {
+  const key = 'q:' + q.id, notes = NOTES.filter(x => x.ort === key).sort((a, b) => (a.erstellt < b.erstellt ? -1 : 1));
+  const d = h('details', 'qnotes'); if (QNOPEN.has(q.id)) d.open = true;
+  d.addEventListener('toggle', () => { if (d.open) QNOPEN.add(q.id); else QNOPEN.delete(q.id); });
+  const s = h('summary', null, `Eure Notizen${notes.length ? ` <span class="qn-n">${notes.length}</span>` : ''}`); d.appendChild(s);
+  notes.forEach(x => d.appendChild(noteEl(x)));
+  if (!sb) { if (!notes.length) d.appendChild(h('p', 'empty', 'Noch keine Notizen.')); return d; }
+  const f = h('form', 'noteform');
+  const nm = store.get('name', '');
+  f.innerHTML = `<input type="text" maxlength="40" placeholder="Dein Name" aria-label="Dein Name" value="${esc(nm)}"${nm ? ' hidden' : ''}><textarea rows="2" maxlength="1200" placeholder="Notiz zu „${esc(q.name)}“ …" aria-label="Notiz zu ${esc(q.name)}"></textarea><button class="iconbtn" type="submit">Notiz speichern</button>`;
+  const nameIn = f.querySelector('input'), ta = f.querySelector('textarea');
+  if (nm) { const line = h('div', 'who'); line.innerHTML = `<span>Du schreibst als <b>${esc(nm)}</b></span>`; const ch = h('button', null, 'Name ändern'); ch.type = 'button'; ch.onclick = () => { line.hidden = true; nameIn.hidden = false; nameIn.focus(); nameIn.select(); }; line.appendChild(ch); f.insertBefore(line, f.firstChild); }
+  f.onsubmit = e => {
+    e.preventDefault(); const v = ta.value.trim(); if (!v) return;
+    const n2 = nameIn.value.trim(); if (!n2) { nameIn.hidden = false; nameIn.focus(); return say('Bitte zuerst deinen Namen eintragen.', 3000); }
+    store.set('name', n2); QNOPEN.add(q.id);
+    addNote(key, v).then(ok => { if (ok) { ta.value = ''; if (ovlKind === 'quest') renderOverlay(true); } });
+  };
+  d.appendChild(f);
+  return d;
+}
 /* ── Start ── */
 rebuildTree(); buildIndex();
 drawBase();
