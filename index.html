@@ -581,6 +581,13 @@ button.tb-chip:hover { border-color: var(--ember); }
 .qnotes > summary:hover, .qnotes > summary:focus-visible { color: var(--text); }
 .qn-n { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--text); }
 .qnotes .note { margin: 6px 0; }
+
+.wtext.ozt { border-left: 2px solid rgba(255,141,92,.55); padding-left: 10px; margin-top: 10px; }
+.pin.heil .ring { opacity: .55; }
+.ozbox { margin-top: 10px; }
+.ozbox summary { cursor: pointer; font-size: 13px; }
+.ozbox select, .ozbox textarea { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
+.ozbox select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; }
 </style>
 
 </head>
@@ -904,7 +911,8 @@ function pin(n) {
   const g = el('g', { class: 'pin' + (S.sel === n.id ? ' sel' : '') + (known(n.id) ? '' : ' unk') + (on.quest && (QSET[n.id] || []).some(q => ACTIVE.has(q.status)) ? ' quest' : ''), 'data-id': n.id, 'data-scale': 1, 'data-pos': `${x},${y}`, tabindex: 0, role: 'button', 'aria-label': n.name }, L.pins);
   el('circle', { r: 13, class: 'hit' }, g);
   el('circle', { r: 10.5, class: 'ring' }, g);
-  (SYM[k] || SYM.poi)(g, SYMCOL[k] || SYMCOL.poi);
+  (SYM[k] || SYM.poi)(g, k === 'symptom' && ozHeil(n.id) ? '#9a9384' : (SYMCOL[k] || SYMCOL.poi));
+  if (k === 'symptom' && ozHeil(n.id)) g.classList.add('heil');
   if (ownMap(n.id)) el('path', { d: 'M6 -12h7v7', stroke: '#ffe3a8', 'stroke-width': 1.6, fill: 'none' }, g);
   if (on.labels) { const t = el('text', { x: 12, y: 4, class: 'lbl small', 'font-size': 12.5, 'stroke-width': 3 }, g); t.textContent = n.name; }
   bindItem(g, n.id);
@@ -1024,7 +1032,8 @@ function renderPanel(force) {
   if (G && G.pos === id) { const d = h('div', 'now'); d.innerHTML = '<h4>Hier ist die Gruppe</h4><p>' + esc(G.stand || '') + '</p>'; panel.appendChild(d); }
 
   if (known(id) && W[id].text) { const d = h('div', 'wtext'); d.innerHTML = mdText(W[id].text); panel.appendChild(d); }
-  else panel.appendChild(h('p', 'unknown', isPin(n) ? 'Darüber wisst ihr noch nichts Genaueres.' : 'Über diese Gegend wisst ihr noch nichts Genaueres.'));
+  if (!(known(id) && W[id].text)) panel.appendChild(h('p', 'unknown', isPin(n) ? 'Darüber wisst ihr noch nichts Genaueres.' : 'Über diese Gegend wisst ihr noch nichts Genaueres.'));
+  if ((known(id) || DMMODE) && ozText(id)) { const d = h('div', 'wtext ozt'); d.innerHTML = mdText(ozText(id)); panel.appendChild(d); }
 
   if (ownMap(id) && S.map !== ownMap(id)) {
     const om = h('div', 'openmap');
@@ -1143,6 +1152,7 @@ function dmBox(id) {
   if (known(id)) { const rm = h('button', 'iconbtn', 'Zurückziehen'); rm.onclick = () => write(() => del('wissen', id), 'Zurückgezogen.').then(() => renderPanel(true)); row.appendChild(rm); }
   box.appendChild(row);
   if (v && v.vault) box.appendChild(vaultBox(v.vault, ta));
+  box.appendChild(ozBox(id));
   const row2 = h('div', 'btnrow');
   const here = h('button', 'iconbtn', 'Gruppe ist jetzt hier');
   here.onclick = () => { const r = (G && G.route || []).slice(); if (r[r.length - 1] !== id) r.push(id); write(() => put('gruppe', { id: 'stand', pos: id, route: r, stand: G && G.stand || '' }), 'Position gesetzt.'); };
@@ -2170,7 +2180,7 @@ renderPanel = function (force) {
   const box = statusBox(id); if (!box) return;
   if (preview && !statusOf(id)) return;
   if (preview) box.querySelectorAll('.ostform').forEach(e => e.remove());
-  const p = $('panel'), anchor = p.querySelector('.wtext') || p.querySelector('.unknown') || p.querySelector('.now') || p.querySelector('.p-path');
+  const p = $('panel'), anchor = p.querySelector('.ozt') || p.querySelector('.wtext') || p.querySelector('.unknown') || p.querySelector('.now') || p.querySelector('.p-path');
   if (anchor) anchor.after(box); else p.appendChild(box);
 };
 /* Legende: Bedeutung der Statuspunkte */
@@ -2773,6 +2783,33 @@ function questNotes(q) {
   d.appendChild(f);
   return d;
 }
+
+/* ── Zustand eines Ortes vor/nach der Heilung eines Symptoms ── */
+let OZ = {};
+LOADERS.ort_zustand = rows => { OZ = toMapById(rows); };
+OPTIONAL.add('ort_zustand');
+const ozHeil = id => { const z = OZ[id]; return !!(z && SY[z.symptom] && SY[z.symptom].geheilt); };
+const ozText = id => { const z = OZ[id]; if (!z) return ''; return ((ozHeil(id) ? z.nach : z.vor) || '').trim(); };
+function ozBox(id) {
+  const z = OZ[id] || {}, d = h('details', 'ozbox'); if (z.symptom) d.open = true;
+  d.appendChild(h('summary', null, 'Zustand vor und nach der Heilung'));
+  const sel = h('select'); sel.setAttribute('aria-label', 'Symptom');
+  const o0 = h('option', null, 'kein Symptom'); o0.value = ''; sel.appendChild(o0);
+  Object.values(SY).sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).forEach(sy => { const op = h('option', null, esc(sy.name) + (sy.geheilt ? ' (geheilt)' : '')); op.value = sy.id; if (z.symptom === sy.id) op.selected = true; sel.appendChild(op); });
+  d.appendChild(sel);
+  const mk = (val, ph, lab) => { const t = h('textarea'); t.rows = 3; t.value = val || ''; t.placeholder = ph; t.setAttribute('aria-label', lab); d.appendChild(t); return t; };
+  const tv = mk(z.vor, 'Solange das Symptom aktiv ist …', 'Text vor der Heilung');
+  const tn = mk(z.nach, 'Nach der Heilung …', 'Text nach der Heilung');
+  d.appendChild(h('div', 'state', 'Die Gruppe sieht den passenden Text unter der Ortsbeschreibung, sobald der Ort freigegeben ist.'));
+  const row = h('div', 'btnrow'), sv = h('button', 'iconbtn', 'Zustand speichern');
+  sv.onclick = () => {
+    if (!sel.value) return OZ[id] ? write(() => del('ort_zustand', id), 'Zustand entfernt.').then(() => renderPanel(true)) : say('Bitte ein Symptom wählen.');
+    write(() => put('ort_zustand', { id, symptom: sel.value, vor: tv.value.trim() || null, nach: tn.value.trim() || null, geaendert: new Date().toISOString() }), 'Gespeichert.').then(() => renderPanel(true));
+  };
+  row.appendChild(sv); d.appendChild(row);
+  return d;
+}
+
 /* ── Start ── */
 rebuildTree(); buildIndex();
 drawBase();
